@@ -1,0 +1,12 @@
+{
+  "name": "stream-announce-bot",
+  "version": "1.0.0",
+  "description": "Discord бот для анонсов стримов",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "clientId": "1514062206663266325",
+  "announceChannelId": "442384601797754880",
+  "streamRoleMention": "@Stream Events",
+  "youtubeChannelHandle": "@animationschool_live",
+  "telegramChannel": "https://t.me/animationschool_ru",
+  "schedule": [
+    { "day": "Пн", "time": "20:00 МСК", "title": "TBD" },
+    { "day": "Ср", "time": "21:00 МСК", "title": "TBD" },
+    { "day": "Пт", "time": "22:00 МСК", "title": "TBD" }
+  ]
+}
