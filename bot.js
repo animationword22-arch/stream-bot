@@ -258,8 +258,14 @@ client.on('interactionCreate', async interaction => {
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
 
-    const mention = interaction.options.getString('mention') || '';
-    const finalText = mention ? `${mention}\n${text}` : text;
+    let mention = interaction.options.getString('mention') || '';
+    // Если передали просто ID — оборачиваем в тег роли
+    if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
+    // Если mention указан — убираем @Stream Events из текста (он уже есть как -#)
+    let finalText = text;
+    if (mention) {
+      finalText = mention + '\n' + text.replace(/^-# [^\n]+\n/, '');
+    }
     await sendAnnouncement(targetChannel, finalText, imageUrl);
     await interaction.editReply(`✅ Анонс опубликован в <#${targetChannel.id}>!`);
   }
@@ -314,8 +320,12 @@ client.on('interactionCreate', async interaction => {
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
 
-    const mention = interaction.options.getString('mention') || '';
-    const finalText = mention ? `${mention}\n${text}` : text;
+    let mention = interaction.options.getString('mention') || '';
+    if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
+    let finalText = text;
+    if (mention) {
+      finalText = mention + '\n' + text.replace(/^-# [^\n]+\n/, '');
+    }
     await sendAnnouncement(targetChannel, finalText, tg.imageUrl);
     await interaction.editReply(
       `✅ Автоанонс опубликован в <#${targetChannel.id}>!` +
