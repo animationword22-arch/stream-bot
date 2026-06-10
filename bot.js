@@ -149,14 +149,19 @@ async function fetchTelegramStreamPost(channelHandle) {
 
   if (!targetPost) throw new Error('Пост про стрим не найден');
 
-  // Картинка — ищем background-image в style
+  // Картинка — ищем все background-image, берём самую большую (последнюю в посте)
   let imageUrl = null;
-  const bgMatch = targetPost.match(/background-image:url\('([^']+)'\)/);
-  if (bgMatch) imageUrl = bgMatch[1];
+  const bgMatches = [...targetPost.matchAll(/background-image:url\('([^']+)'\)/g)];
+  if (bgMatches.length > 0) {
+    // Последний background-image обычно самый большой
+    imageUrl = bgMatches[bgMatches.length - 1][1];
+  }
   if (!imageUrl) {
     const imgMatch = targetPost.match(/<img[^>]+src="([^"]+)"/);
     if (imgMatch) imageUrl = imgMatch[1];
   }
+  // Убираем размерные параметры из URL чтобы получить оригинал
+  if (imageUrl) imageUrl = imageUrl.replace(/\/s\d+\//, '/');
 
   console.log(`[TG] Image URL: ${imageUrl}`);
 
