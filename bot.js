@@ -103,7 +103,7 @@ function fetchUrl(url) {
       res.on('end', () => resolve(data));
     });
     req.on('error', reject);
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Timeout')); });
   });
 }
 
@@ -113,7 +113,9 @@ function fetchUrl(url) {
 // Картинки в <a style="background-image:url('...')"> или <img src="...">
 async function fetchTelegramStreamPost(channelHandle) {
   // channelHandle: 'animationschool_ru'
+  console.log(`[TG] Fetching t.me/s/${channelHandle}...`);
   const html = await fetchUrl(`https://t.me/s/${channelHandle}`);
+  console.log(`[TG] Got ${html.length} bytes`);
 
   // Разбиваем на блоки постов
   const postBlocks = [...html.matchAll(
