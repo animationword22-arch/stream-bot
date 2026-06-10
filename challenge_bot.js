@@ -15,25 +15,36 @@ const client = new Client({
 const commands = [
 
   new SlashCommandBuilder()
-    .setName('challenge')
-    .setDescription('Опубликовать анонс челленджа вручную')
+    .setName('autochallenge')
+    .setDescription('Анонс челленджа из Telegram (анимация)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('title')      .setDescription('Заголовок, напр. «👊✨ Тема июня — Кунг-фу!»').setRequired(true))
-    .addStringOption(o => o.setName('body')       .setDescription('Основной текст анонса').setRequired(true))
-    .addStringOption(o => o.setName('outro')      .setDescription('Финальная фраза, напр. «Ждём ваши работы! ❤️»').setRequired(false))
-    .addStringOption(o => o.setName('discord_url').setDescription('Ссылка на Discord-событие или канал').setRequired(false))
-    .addAttachmentOption(o => o.setName('image')  .setDescription('Обложка челленджа').setRequired(false))
-    .addStringOption(o => o.setName('image_url')  .setDescription('URL обложки (если нет файла)').setRequired(false))
-    .addChannelOption(o => o.setName('channel')   .setDescription('Канал публикации (по умолчанию из config)').setRequired(false))
-    .addStringOption(o => o.setName('mention')    .setDescription('Тег роли/пользователя, напр. @everyone').setRequired(false)),
+    .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка (если не загружена — берётся из Telegram)').setRequired(false))
+    .addStringOption(o => o.setName('event_url')    .setDescription('Ссылка на событие Discord').setRequired(false))
+    .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
-    .setName('autochallenge')
-    .setDescription('Подтянуть последний анонс челленджа из Telegram и опубликовать')
+    .setName('autosketching')
+    .setDescription('Анонс скетчинга из Telegram')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addAttachmentOption(o => o.setName('image')  .setDescription('Обложка (если не загружена — берётся из Telegram)').setRequired(false))
-    .addChannelOption(o => o.setName('channel')   .setDescription('Канал публикации (по умолчанию из config)').setRequired(false))
-    .addStringOption(o => o.setName('mention')    .setDescription('Тег роли/пользователя').setRequired(false)),
+    .addStringOption(o => o.setName('topic')        .setDescription('Тема занятия, напр. «раскадровка»').setRequired(true))
+    .addStringOption(o => o.setName('time')         .setDescription('Время по мск, напр. «17:00»').setRequired(false))
+    .addStringOption(o => o.setName('event_url')    .setDescription('Ссылка на событие Discord').setRequired(false))
+    .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка').setRequired(false))
+    .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли/пользователя').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('challenge')
+    .setDescription('Ручной анонс челленджа')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption(o => o.setName('title')        .setDescription('Заголовок').setRequired(true))
+    .addStringOption(o => o.setName('body')         .setDescription('Основной текст').setRequired(true))
+    .addStringOption(o => o.setName('discord_url')  .setDescription('Ссылка на событие Discord').setRequired(false))
+    .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка').setRequired(false))
+    .addStringOption(o => o.setName('image_url')    .setDescription('URL обложки').setRequired(false))
+    .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('challengeend')
@@ -52,7 +63,7 @@ async function registerCommands() {
   } catch (e) { console.error('Ошибка регистрации:', e); }
 }
 
-// ─── HTTP fetch ───────────────────────────────────────────────────────────────
+// ─── HTTP ─────────────────────────────────────────────────────────────────────
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
@@ -88,7 +99,7 @@ function fetchImageBuffer(url) {
 }
 
 // ─── Парсинг Telegram ─────────────────────────────────────────────────────────
-async function fetchTelegramChallengePost(channelHandle) {
+async function fetchTelegramPost(channelHandle, keywords) {
   console.log(`[TG] Fetching t.me/s/${channelHandle}...`);
   const html = await fetchUrl(`https://t.me/s/${channelHandle}`);
   console.log(`[TG] Got ${html.length} bytes`);
@@ -97,20 +108,13 @@ async function fetchTelegramChallengePost(channelHandle) {
     /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
   )].map(m => m[0]);
 
-  const keywords = ['челлендж', 'challenge', 'анимируем', 'тема месяца', 'тема июня', 'тема недели', 'анимировать'];
   const regex = new RegExp(keywords.join('|'), 'i');
-
   let targetPost = null;
   for (let i = postBlocks.length - 1; i >= 0; i--) {
-    if (regex.test(postBlocks[i])) {
-      targetPost = postBlocks[i];
-      break;
-    }
+    if (regex.test(postBlocks[i])) { targetPost = postBlocks[i]; break; }
   }
+  if (!targetPost) throw new Error('Пост не найден');
 
-  if (!targetPost) throw new Error('Пост про челлендж не найден');
-
-  // Текст только из блока сообщения
   let textRaw = '';
   const msgTextMatch = targetPost.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
   if (msgTextMatch) {
@@ -127,74 +131,74 @@ async function fetchTelegramChallengePost(channelHandle) {
       .trim();
   }
 
-  // Картинка из фото-блока поста
   let imageUrl = null;
   const photoWrapMatch = targetPost.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
   if (photoWrapMatch) imageUrl = photoWrapMatch[1];
   if (!imageUrl) {
     const bgMatches = [...targetPost.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
     for (const m of bgMatches) {
-      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) {
-        imageUrl = m[1]; break;
-      }
+      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) { imageUrl = m[1]; break; }
     }
   }
 
-  // Discord ссылка
   const discordMatch = targetPost.match(/href="(https?:\/\/discord\.(?:gg|com)[^"]+)"/);
-
   console.log(`[TG] Image: ${imageUrl}`);
 
-  return {
-    text: textRaw,
-    imageUrl: imageUrl || null,
-    discordUrl: discordMatch ? discordMatch[1] : null,
-  };
+  return { text: textRaw, imageUrl: imageUrl || null, discordUrl: discordMatch ? discordMatch[1] : null };
 }
 
-// ─── Форматирование анонса челленджа ──────────────────────────────────────────
-// Формат как на скриншоте: жирный заголовок, текст, ссылки
-function buildChallengeText({ title, body, outro, discordUrl, mention, roleMention }) {
+// ─── Форматирование: ЧЕЛЛЕНДЖ ─────────────────────────────────────────────────
+function buildChallengeText({ title, body, discordUrl, mention, roleMention }) {
   let text = '';
-
-  if (mention) {
-    text += `${mention}\n`;
-  } else if (roleMention) {
-    text += `-# ${roleMention}\n`;
-  }
-
-  text += `**${title}**\n`;
-
-  if (body) text += `\n${body}\n`;
-  if (outro) text += `\n${outro}\n`;
-  if (discordUrl) text += `\n${discordUrl}`;
-
-  return text;
+  if (mention) text += `${mention}\n`;
+  else if (roleMention) text += `${roleMention}\n`;
+  if (title) text += `# ${title}\n`;
+  if (body) text += body;
+  if (discordUrl) text += `\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
+  return text.trim();
 }
 
-// ─── Отправка с картинкой ─────────────────────────────────────────────────────
-async function sendAnnouncement(channel, text, imageUrl) {
-  if (!imageUrl) {
-    await channel.send({ content: text });
-    return;
+// ─── Форматирование: СКЕТЧИНГ ─────────────────────────────────────────────────
+function buildSketchingText({ topic, time, discordUrl, sketchChannelId, telegramUrl, mention, roleMention }) {
+  const t = time || '17:00';
+  const sketchChannel = sketchChannelId ? `<#${sketchChannelId}>` : '#sketching-sessions-chat';
+  const tgLink = telegramUrl || 'https://t.me/animationclub_challange';
+
+  let text = '';
+  if (mention) text += `-# ${mention}\n`;
+  else if (roleMention) text += `-# ${roleMention}\n`;
+
+  text += `# Присоединяйтесь к Live Sketching Sessions! Сегодня мы в ${t} по мск будем ${topic}! 🎨\n`;
+  text += `Каждую субботу в ${t} по московскому времени, мы проводим практики по рисованию, в Discord и Telegram!\n\n`;
+  text += `Нужно будет рисовать наброски или анатомию в любых техниках, в которых захотите. Референсы для рисования будут в ${sketchChannel}, туда же можно выкладывать свои работы. Или под соответствующим постом в [телеграме](${tgLink}) в комментариях!`;
+
+  if (discordUrl) {
+    text += `\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
   }
+
+  return text.trim();
+}
+
+// ─── Отправка ─────────────────────────────────────────────────────────────────
+async function sendAnnouncement(channel, text, imageUrl) {
+  if (!imageUrl) { await channel.send({ content: text }); return; }
   try {
     if (imageUrl.includes('cdn.discordapp.com') || imageUrl.includes('media.discordapp.net')) {
-      await channel.send({ content: text, files: [{ attachment: imageUrl, name: 'challenge.jpg' }] });
+      await channel.send({ content: text, files: [{ attachment: imageUrl, name: 'cover.jpg' }] });
     } else {
       const buffer = await fetchImageBuffer(imageUrl);
-      const attachment = new AttachmentBuilder(buffer, { name: 'challenge.jpg' });
+      const attachment = new AttachmentBuilder(buffer, { name: 'cover.jpg' });
       await channel.send({ content: text, files: [attachment] });
     }
   } catch (e) {
-    console.warn('[IMG] Ошибка картинки:', e.message);
+    console.warn('[IMG] Ошибка:', e.message);
     await channel.send({ content: text });
   }
 }
 
 // ─── Ready ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
-  console.log(`Бот челленджей запущен как ${client.user.tag}`);
+  console.log(`Бот запущен как ${client.user.tag}`);
   await registerCommands();
 });
 
@@ -203,11 +207,92 @@ client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
 
+  // ── /autochallenge ────────────────────────────────────────────────────────────
+  if (commandName === 'autochallenge') {
+    await interaction.deferReply({ ephemeral: true });
+
+    const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
+    let tg;
+    try {
+      tg = await fetchTelegramPost(tgHandle, ['челлендж', 'challenge', 'тема', 'анимируем', 'присоединяйтесь', 'присылайте']);
+    } catch (e) {
+      return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
+    }
+
+    const attached = interaction.options.getAttachment('image');
+    if (attached) tg.imageUrl = attached.url;
+    const eventUrl = interaction.options.getString('event_url') || '';
+    if (eventUrl) tg.discordUrl = eventUrl;
+
+    let mention = interaction.options.getString('mention') || '';
+    if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
+
+    const allLines = tg.text.split('\n');
+    const title = allLines[0]?.trim() || '';
+    const body  = allLines.slice(1).join('\n').trim();
+
+    const bodyLines = body.split('\n').filter(l => !l.trim().startsWith('https://discord.com/events'));
+    let firstBodyLine = true;
+    const cleanBody = bodyLines.map(l => {
+      if (firstBodyLine && l.trim()) { firstBodyLine = false; return `## ${l.trim()}`; }
+      return l;
+    }).join('\n').trim();
+
+    const text = buildChallengeText({
+      title, body: cleanBody,
+      discordUrl: tg.discordUrl || '',
+      mention,
+      roleMention: mention ? null : (config.challengeRoleMention || null)
+    });
+
+    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
+    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
+    await sendAnnouncement(targetChannel, text, tg.imageUrl);
+    await interaction.editReply(`✅ Анонс челленджа опубликован в <#${targetChannel.id}>!`);
+  }
+
+  // ── /autosketching ────────────────────────────────────────────────────────────
+  if (commandName === 'autosketching') {
+    await interaction.deferReply({ ephemeral: true });
+
+    const topic    = interaction.options.getString('topic');
+    const time     = interaction.options.getString('time') || '17:00';
+    const eventUrl = interaction.options.getString('event_url') || '';
+    const attached = interaction.options.getAttachment('image');
+    let   mention  = interaction.options.getString('mention') || '';
+    if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
+
+    // Пробуем подтянуть картинку из Telegram если не приложена
+    let imageUrl = attached ? attached.url : null;
+    if (!imageUrl) {
+      try {
+        const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
+        const tg = await fetchTelegramPost(tgHandle, ['скетчинг', 'sketching', 'персонаж', 'рисовать', 'наброски', 'live sketching']);
+        if (tg.imageUrl) imageUrl = tg.imageUrl;
+      } catch (e) {
+        console.warn('[TG] Обложка скетчинга не найдена:', e.message);
+      }
+    }
+
+    const text = buildSketchingText({
+      topic, time,
+      discordUrl:     eventUrl || config.sketchingEventUrl || '',
+      sketchChannelId: config.sketchingChannelId || '',
+      telegramUrl:    config.telegramChannel || 'https://t.me/animationclub_challange',
+      mention,
+      roleMention: mention ? null : (config.sketchingRoleMention || config.challengeRoleMention || null)
+    });
+
+    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.sketchingAnnounceChannelId || config.announceChannelId);
+    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
+    await sendAnnouncement(targetChannel, text, imageUrl);
+    await interaction.editReply(`✅ Анонс скетчинга опубликован в <#${targetChannel.id}>!`);
+  }
+
   // ── /challenge ────────────────────────────────────────────────────────────────
   if (commandName === 'challenge') {
     const title      = interaction.options.getString('title');
     const body       = interaction.options.getString('body');
-    const outro      = interaction.options.getString('outro') || '';
     const discordUrl = interaction.options.getString('discord_url') || '';
     let   imageUrl   = interaction.options.getString('image_url') || '';
     const attached   = interaction.options.getAttachment('image');
@@ -219,69 +304,28 @@ client.on('interactionCreate', async interaction => {
     if (!imageUrl) {
       try {
         const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
-        const tg = await fetchTelegramChallengePost(tgHandle);
+        const tg = await fetchTelegramPost(tgHandle, ['челлендж', 'тема', 'анимируем']);
         if (tg.imageUrl) imageUrl = tg.imageUrl;
-      } catch (e) {
-        console.warn('[TG] Обложка не найдена:', e.message);
-      }
+      } catch (e) { console.warn('[TG] Обложка не найдена:', e.message); }
     }
 
     if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
 
     const text = buildChallengeText({
-      title, body, outro, discordUrl, mention,
+      title, body, discordUrl, mention,
       roleMention: mention ? null : (config.challengeRoleMention || null)
     });
 
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
-
     await sendAnnouncement(targetChannel, text, imageUrl);
-    await interaction.editReply(`✅ Анонс челленджа опубликован в <#${targetChannel.id}>!`);
-  }
-
-  // ── /autochallenge ────────────────────────────────────────────────────────────
-  if (commandName === 'autochallenge') {
-    await interaction.deferReply({ ephemeral: true });
-
-    const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
-    let tg;
-    try {
-      tg = await fetchTelegramChallengePost(tgHandle);
-    } catch (e) {
-      return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
-    }
-
-    const attached = interaction.options.getAttachment('image');
-    if (attached) tg.imageUrl = attached.url;
-
-    let mention = interaction.options.getString('mention') || '';
-    if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
-
-    // Разбиваем текст: первая строка — заголовок, остальное — тело
-    const allLines = tg.text.split('\n');
-    const title = allLines[0]?.trim() || '';
-    const body  = allLines.slice(1).join('\n').trim();
-
-    const text = buildChallengeText({
-      title, body,
-      discordUrl: tg.discordUrl || '',
-      mention,
-      roleMention: mention ? null : (config.challengeRoleMention || null)
-    });
-
-    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
-    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
-
-    await sendAnnouncement(targetChannel, text, tg.imageUrl);
-    await interaction.editReply(`✅ Автоанонс челленджа опубликован в <#${targetChannel.id}>!`);
+    await interaction.editReply(`✅ Анонс опубликован в <#${targetChannel.id}>!`);
   }
 
   // ── /challengeend ─────────────────────────────────────────────────────────────
   if (commandName === 'challengeend') {
     const channel = client.channels.cache.get(config.announceChannelId);
     if (!channel) return interaction.reply({ content: '❌ Канал не найден.', ephemeral: true });
-
     const roleMention = config.challengeRoleMention || '';
     await channel.send(
       (roleMention ? `-# ${roleMention}\n` : '') +
