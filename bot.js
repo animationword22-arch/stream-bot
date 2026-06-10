@@ -1,6 +1,6 @@
 const {
   Client, GatewayIntentBits, PermissionFlagsBits,
-  SlashCommandBuilder, REST, Routes, EmbedBuilder
+  SlashCommandBuilder, REST, Routes, AttachmentBuilder
 } = require('discord.js');
 const https = require('https');
 const http  = require('http');
@@ -158,12 +158,20 @@ async function fetchTelegramStreamPost(channelHandle) {
 
   console.log(`[TG] Image URL: ${imageUrl}`);
 
-  const textRaw = targetPost
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'").trim();
+  // Берём только текст сообщения из tgme_widget_message_text
+  let textRaw = '';
+  const msgTextMatch = targetPost.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+  if (msgTextMatch) {
+    textRaw = msgTextMatch[1]
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '$2') // убираем ссылки, оставляем текст
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n') // убираем лишние пустые строки
+      .trim();
+  }
 
   const ytMatch = targetPost.match(/href="(https?:\/\/(?:www\.)?youtube[^"]+)"/);
   const vkMatch = targetPost.match(/href="(https?:\/\/(?:www\.)?vkvideo[^"]+|https?:\/\/vk\.com\/video[^"]+)"/);
@@ -197,9 +205,10 @@ async function sendAnnouncement(channel, text, imageUrl) {
     return;
   }
   try {
-    // Embed показывает картинку в полном качестве прямо под текстом
-    const embed = new EmbedBuilder().setImage(imageUrl).setColor(0x2B2D31);
-    await channel.send({ content: text, embeds: [embed] });
+    const buffer = await fetchImageBuffer(imageUrl);
+    const attachment = new AttachmentBuilder(buffer, { name: 'cover.jpg' });
+    // Текст + картинка как файл = полное качество без сжатия
+    await channel.send({ content: text, files: [attachment] });
   } catch (e) {
     console.warn('[IMG] Не удалось отправить с картинкой:', e.message);
     await channel.send({ content: text });
