@@ -18,6 +18,7 @@ const commands = [
     .setName('autochallenge')
     .setDescription('Анонс челленджа из Telegram (анимация)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption(o => o.setName('post_id')      .setDescription('Номер поста в Telegram, напр. 796').setRequired(false))
     .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка (если не загружена — берётся из Telegram)').setRequired(false))
     .addStringOption(o => o.setName('event_url')    .setDescription('Ссылка на событие Discord').setRequired(false))
     .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
@@ -28,6 +29,7 @@ const commands = [
     .setDescription('Анонс скетчинга из Telegram')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption(o => o.setName('topic')        .setDescription('Тема занятия, напр. «раскадровка»').setRequired(true))
+    .addStringOption(o => o.setName('post_id')      .setDescription('Номер поста в Telegram для обложки, напр. 796').setRequired(false))
     .addStringOption(o => o.setName('time')         .setDescription('Время по мск, напр. «17:00»').setRequired(false))
     .addStringOption(o => o.setName('event_url')    .setDescription('Ссылка на событие Discord').setRequired(false))
     .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка').setRequired(false))
@@ -147,6 +149,53 @@ async function fetchTelegramPost(channelHandle, keywords) {
   return { text: textRaw, imageUrl: imageUrl || null, discordUrl: discordMatch ? discordMatch[1] : null };
 }
 
+// ─── Парсинг конкретного поста по ID ─────────────────────────────────────────
+async function fetchTelegramPostById(channelHandle, postId) {
+  console.log(`[TG] Fetching post ${postId} from ${channelHandle}...`);
+  const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${parseInt(postId)+1}`);
+  
+  const postBlocks = [...html.matchAll(
+    /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
+  )].map(m => m[0]);
+
+  // Ищем пост с нужным ID
+  const targetPost = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`)) || postBlocks[postBlocks.length - 1];
+  if (!targetPost) throw new Error('Пост не найден');
+
+  let textRaw = '';
+  const msgTextMatch = targetPost.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+  if (msgTextMatch) {
+    textRaw = msgTextMatch[1]
+      .replace(/<br\s*\/?>/gi, '
+')
+      .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
+      .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
+      .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/
+{3,}/g, '
+
+')
+      .trim();
+  }
+
+  let imageUrl = null;
+  const photoWrapMatch = targetPost.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
+  if (photoWrapMatch) imageUrl = photoWrapMatch[1];
+  if (!imageUrl) {
+    const bgMatches = [...targetPost.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
+    for (const m of bgMatches) {
+      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) { imageUrl = m[1]; break; }
+    }
+  }
+
+  const discordMatch = targetPost.match(/href="(https?:\/\/discord\.(?:gg|com)[^"]+)"/);
+  return { text: textRaw, imageUrl: imageUrl || null, discordUrl: discordMatch ? discordMatch[1] : null };
+}
+
 // ─── Форматирование: ЧЕЛЛЕНДЖ ─────────────────────────────────────────────────
 function buildChallengeText({ title, body, discordUrl, mention, roleMention }) {
   let text = '';
@@ -212,9 +261,14 @@ client.on('interactionCreate', async interaction => {
     await interaction.deferReply({ ephemeral: true });
 
     const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
+    const postId = interaction.options.getString('post_id') || '';
     let tg;
     try {
-      tg = await fetchTelegramPost(tgHandle, ['челлендж', 'challenge', 'тема', 'анимируем', 'присоединяйтесь', 'присылайте']);
+      if (postId) {
+        tg = await fetchTelegramPostById(tgHandle, postId);
+      } else {
+        tg = await fetchTelegramPost(tgHandle, ['челлендж', 'challenge', 'тема', 'анимируем', 'присоединяйтесь', 'присылайте']);
+      }
     } catch (e) {
       return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
     }
@@ -268,13 +322,19 @@ client.on('interactionCreate', async interaction => {
     let   mention  = interaction.options.getString('mention') || '';
     if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
 
+    const postId = interaction.options.getString('post_id') || '';
     // Пробуем подтянуть картинку из Telegram если не приложена
     let imageUrl = attached ? attached.url : null;
     if (!imageUrl) {
       try {
         const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
-        const tg = await fetchTelegramPost(tgHandle, ['скетчинг', 'sketching', 'персонаж', 'рисовать', 'наброски', 'live sketching']);
-        if (tg.imageUrl) imageUrl = tg.imageUrl;
+        if (postId) {
+          const tg = await fetchTelegramPostById(tgHandle, postId);
+          if (tg.imageUrl) imageUrl = tg.imageUrl;
+        } else {
+          const tg = await fetchTelegramPost(tgHandle, ['скетчинг', 'sketching', 'персонаж', 'рисовать', 'наброски', 'live sketching']);
+          if (tg.imageUrl) imageUrl = tg.imageUrl;
+        }
       } catch (e) {
         console.warn('[TG] Обложка скетчинга не найдена:', e.message);
       }
