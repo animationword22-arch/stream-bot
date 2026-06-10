@@ -25,7 +25,8 @@ const commands = [
     .addStringOption(o => o.setName('outro')        .setDescription('Финальная фраза + дата/время').setRequired(false))
     .addStringOption(o => o.setName('youtube_url')  .setDescription('Ссылка YouTube').setRequired(false))
     .addStringOption(o => o.setName('vk_url')       .setDescription('Ссылка VK Видео').setRequired(false))
-    .addStringOption(o => o.setName('image_url')    .setDescription('URL обложки (если не заполнено — берётся из Telegram)').setRequired(false)),
+    .addStringOption(o => o.setName('image_url')    .setDescription('URL обложки (если не заполнено — берётся из Telegram)').setRequired(false))
+    .addChannelOption(o => o.setName('channel')     .setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('autoannounce')
@@ -242,10 +243,10 @@ client.on('interactionCreate', async interaction => {
     const points = pointsRaw ? pointsRaw.split(';').filter(Boolean) : [];
     const text   = buildAnnouncement({ title, speaker, speakerRole, points, outro, youtubeUrl, vkUrl });
 
-    const channel = client.channels.cache.get(config.announceChannelId);
-    if (!channel) return interaction.editReply('❌ Канал не найден.');
+    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
+    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
 
-    await sendAnnouncement(channel, text, imageUrl);
+    await sendAnnouncement(targetChannel, text, imageUrl);
     await interaction.editReply(`✅ Анонс опубликован в <#${config.announceChannelId}>!`);
   }
 
