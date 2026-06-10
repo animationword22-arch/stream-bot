@@ -289,9 +289,22 @@ client.on('interactionCreate', async interaction => {
     if (youtubeUrl) links.push(`**[YouTube](${youtubeUrl})**`);
     if (tg.vkUrl)   links.push(`**[VK Видео](${tg.vkUrl})**`);
 
+    // Первая строка текста — заголовок (делаем крупным через #)
+    const lines = tg.text.split('\n').filter(l => l.trim());
+    const title = lines[0] || '';
+    const body = lines.slice(1).join('\n').trim();
+
+    // Убираем строки "YouTube | VK Видео" из тела — они дублируют ссылки
+    const cleanBody = body
+      .split('\n')
+      .filter(l => !/^(youtube|vk видео|ютуб)/i.test(l.trim()) && !/^youtube\s*\|\s*vk/i.test(l.trim()))
+      .join('\n')
+      .trim();
+
     let text = `-# ${roleMention}\n`;
-    text += tg.text;
-    if (links.length) text += `\n\n${links.join(' | ')}`;
+    text += `# ${title}\n`;
+    if (cleanBody) text += `\n${cleanBody}`;
+    if (links.length) text += `\n${links.join(' | ')}`;
 
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
