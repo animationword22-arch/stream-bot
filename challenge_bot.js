@@ -11,42 +11,40 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// ─── Команды ──────────────────────────────────────────────────────────────────
 const commands = [
-
   new SlashCommandBuilder()
     .setName('autochallenge')
     .setDescription('Анонс челленджа из Telegram (анимация)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('post_id')      .setDescription('Номер поста в Telegram, напр. 796').setRequired(false))
-    .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка (если не загружена — берётся из Telegram)').setRequired(false))
-    .addStringOption(o => o.setName('event_url')    .setDescription('Ссылка на событие Discord').setRequired(false))
-    .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
-    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли/пользователя').setRequired(false)),
+    .addStringOption(o => o.setName('post_id').setDescription('Номер поста в Telegram, напр. 796').setRequired(false))
+    .addAttachmentOption(o => o.setName('image').setDescription('Обложка').setRequired(false))
+    .addStringOption(o => o.setName('event_url').setDescription('Ссылка на событие Discord').setRequired(false))
+    .addChannelOption(o => o.setName('channel').setDescription('Канал публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention').setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('autosketching')
     .setDescription('Анонс скетчинга из Telegram')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('topic')        .setDescription('Тема занятия, напр. «раскадровка»').setRequired(true))
-    .addStringOption(o => o.setName('post_id')      .setDescription('Номер поста в Telegram для обложки, напр. 796').setRequired(false))
-    .addStringOption(o => o.setName('time')         .setDescription('Время по мск, напр. «17:00»').setRequired(false))
-    .addStringOption(o => o.setName('event_url')    .setDescription('Ссылка на событие Discord').setRequired(false))
-    .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка').setRequired(false))
-    .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
-    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли/пользователя').setRequired(false)),
+    .addStringOption(o => o.setName('topic').setDescription('Тема занятия, напр. «раскадровку»').setRequired(true))
+    .addStringOption(o => o.setName('post_id').setDescription('Номер поста в Telegram для обложки').setRequired(false))
+    .addStringOption(o => o.setName('time').setDescription('Время по мск, напр. «17:00»').setRequired(false))
+    .addStringOption(o => o.setName('event_url').setDescription('Ссылка на событие Discord').setRequired(false))
+    .addAttachmentOption(o => o.setName('image').setDescription('Обложка').setRequired(false))
+    .addChannelOption(o => o.setName('channel').setDescription('Канал публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention').setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('challenge')
     .setDescription('Ручной анонс челленджа')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('title')        .setDescription('Заголовок').setRequired(true))
-    .addStringOption(o => o.setName('body')         .setDescription('Основной текст').setRequired(true))
-    .addStringOption(o => o.setName('discord_url')  .setDescription('Ссылка на событие Discord').setRequired(false))
-    .addAttachmentOption(o => o.setName('image')    .setDescription('Обложка').setRequired(false))
-    .addStringOption(o => o.setName('image_url')    .setDescription('URL обложки').setRequired(false))
-    .addChannelOption(o => o.setName('channel')     .setDescription('Канал публикации').setRequired(false))
-    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли/пользователя').setRequired(false)),
+    .addStringOption(o => o.setName('title').setDescription('Заголовок').setRequired(true))
+    .addStringOption(o => o.setName('body').setDescription('Основной текст').setRequired(true))
+    .addStringOption(o => o.setName('discord_url').setDescription('Ссылка на событие Discord').setRequired(false))
+    .addAttachmentOption(o => o.setName('image').setDescription('Обложка').setRequired(false))
+    .addStringOption(o => o.setName('image_url').setDescription('URL обложки').setRequired(false))
+    .addChannelOption(o => o.setName('channel').setDescription('Канал публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention').setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('challengeend')
@@ -55,17 +53,15 @@ const commands = [
 
 ].map(c => c.toJSON());
 
-// ─── Регистрация ──────────────────────────────────────────────────────────────
 async function registerCommands() {
   const rest = new REST({ version: '10' }).setToken(config.token);
   try {
-    console.log('Регистрирую команды челленджа…');
+    console.log('Регистрирую команды…');
     await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
     console.log('Команды зарегистрированы ✓');
   } catch (e) { console.error('Ошибка регистрации:', e); }
 }
 
-// ─── HTTP ─────────────────────────────────────────────────────────────────────
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
@@ -86,9 +82,7 @@ function fetchUrl(url) {
 function fetchImageBuffer(url) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
-    const req = lib.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    }, res => {
+    const req = lib.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location)
         return fetchImageBuffer(res.headers.location).then(resolve).catch(reject);
       const chunks = [];
@@ -100,28 +94,12 @@ function fetchImageBuffer(url) {
   });
 }
 
-// ─── Парсинг Telegram ─────────────────────────────────────────────────────────
-async function fetchTelegramPost(channelHandle, keywords) {
-  console.log(`[TG] Fetching t.me/s/${channelHandle}...`);
-  const html = await fetchUrl(`https://t.me/s/${channelHandle}`);
-  console.log(`[TG] Got ${html.length} bytes`);
-
-  const postBlocks = [...html.matchAll(
-    /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
-  )].map(m => m[0]);
-
-  const regex = new RegExp(keywords.join('|'), 'i');
-  let targetPost = null;
-  for (let i = postBlocks.length - 1; i >= 0; i--) {
-    if (regex.test(postBlocks[i])) { targetPost = postBlocks[i]; break; }
-  }
-  if (!targetPost) throw new Error('Пост не найден');
-
+function parsePostHtml(postHtml) {
   let textRaw = '';
-  const msgTextMatch = targetPost.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+  const msgTextMatch = postHtml.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
   if (msgTextMatch) {
     textRaw = msgTextMatch[1]
-      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<br[^>]*>/gi, '\n')
       .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
       .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
       .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
@@ -134,69 +112,41 @@ async function fetchTelegramPost(channelHandle, keywords) {
   }
 
   let imageUrl = null;
-  const photoWrapMatch = targetPost.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
-  if (photoWrapMatch) imageUrl = photoWrapMatch[1];
+  const photoMatch = postHtml.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
+  if (photoMatch) imageUrl = photoMatch[1];
   if (!imageUrl) {
-    const bgMatches = [...targetPost.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
+    const bgMatches = [...postHtml.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
     for (const m of bgMatches) {
       if (!m[1].includes('youtube') && !m[1].includes('vk.com')) { imageUrl = m[1]; break; }
     }
   }
 
-  const discordMatch = targetPost.match(/href="(https?:\/\/discord\.(?:gg|com)[^"]+)"/);
-  console.log(`[TG] Image: ${imageUrl}`);
-
+  const discordMatch = postHtml.match(/href="(https?:\/\/discord\.(?:gg|com)[^"]+)"/);
   return { text: textRaw, imageUrl: imageUrl || null, discordUrl: discordMatch ? discordMatch[1] : null };
 }
 
-// ─── Парсинг конкретного поста по ID ─────────────────────────────────────────
 async function fetchTelegramPostById(channelHandle, postId) {
-  console.log(`[TG] Fetching post ${postId} from ${channelHandle}...`);
-  const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${parseInt(postId)+1}`);
-  
-  const postBlocks = [...html.matchAll(
-    /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
-  )].map(m => m[0]);
-
-  // Ищем пост с нужным ID
-  const targetPost = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`)) || postBlocks[postBlocks.length - 1];
-  if (!targetPost) throw new Error('Пост не найден');
-
-  let textRaw = '';
-  const msgTextMatch = targetPost.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
-  if (msgTextMatch) {
-    textRaw = msgTextMatch[1]
-      .replace(/<br\s*\/?>/gi, '
-')
-      .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
-      .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
-      .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/
-{3,}/g, '
-
-')
-      .trim();
-  }
-
-  let imageUrl = null;
-  const photoWrapMatch = targetPost.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
-  if (photoWrapMatch) imageUrl = photoWrapMatch[1];
-  if (!imageUrl) {
-    const bgMatches = [...targetPost.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
-    for (const m of bgMatches) {
-      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) { imageUrl = m[1]; break; }
-    }
-  }
-
-  const discordMatch = targetPost.match(/href="(https?:\/\/discord\.(?:gg|com)[^"]+)"/);
-  return { text: textRaw, imageUrl: imageUrl || null, discordUrl: discordMatch ? discordMatch[1] : null };
+  console.log(`[TG] Fetching post ${postId}...`);
+  const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${parseInt(postId) + 1}`);
+  const postBlocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
+  const target = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`)) || postBlocks[postBlocks.length - 1];
+  if (!target) throw new Error('Пост не найден');
+  return parsePostHtml(target);
 }
 
-// ─── Форматирование: ЧЕЛЛЕНДЖ ─────────────────────────────────────────────────
+async function fetchTelegramPost(channelHandle, keywords) {
+  console.log(`[TG] Fetching latest post from ${channelHandle}...`);
+  const html = await fetchUrl(`https://t.me/s/${channelHandle}`);
+  const postBlocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
+  const regex = new RegExp(keywords.join('|'), 'i');
+  let target = null;
+  for (let i = postBlocks.length - 1; i >= 0; i--) {
+    if (regex.test(postBlocks[i])) { target = postBlocks[i]; break; }
+  }
+  if (!target) throw new Error('Пост не найден');
+  return parsePostHtml(target);
+}
+
 function buildChallengeText({ title, body, discordUrl, mention, roleMention }) {
   let text = '';
   if (mention) text += `${mention}\n`;
@@ -207,28 +157,20 @@ function buildChallengeText({ title, body, discordUrl, mention, roleMention }) {
   return text.trim();
 }
 
-// ─── Форматирование: СКЕТЧИНГ ─────────────────────────────────────────────────
 function buildSketchingText({ topic, time, discordUrl, sketchChannelId, telegramUrl, mention, roleMention }) {
   const t = time || '17:00';
   const sketchChannel = sketchChannelId ? `<#${sketchChannelId}>` : '#sketching-sessions-chat';
   const tgLink = telegramUrl || 'https://t.me/animationclub_challange';
-
   let text = '';
   if (mention) text += `-# ${mention}\n`;
   else if (roleMention) text += `-# ${roleMention}\n`;
-
   text += `# Присоединяйтесь к Live Sketching Sessions! Сегодня мы в ${t} по мск будем ${topic}! 🎨\n`;
   text += `Каждую субботу в ${t} по московскому времени, мы проводим практики по рисованию, в Discord и Telegram!\n\n`;
   text += `Нужно будет рисовать наброски или анатомию в любых техниках, в которых захотите. Референсы для рисования будут в ${sketchChannel}, туда же можно выкладывать свои работы. Или под соответствующим постом в [телеграме](${tgLink}) в комментариях!`;
-
-  if (discordUrl) {
-    text += `\n\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
-  }
-
+  if (discordUrl) text += `\n\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
   return text.trim();
 }
 
-// ─── Отправка ─────────────────────────────────────────────────────────────────
 async function sendAnnouncement(channel, text, imageUrl) {
   if (!imageUrl) { await channel.send({ content: text }); return; }
   try {
@@ -236,8 +178,7 @@ async function sendAnnouncement(channel, text, imageUrl) {
       await channel.send({ content: text, files: [{ attachment: imageUrl, name: 'cover.jpg' }] });
     } else {
       const buffer = await fetchImageBuffer(imageUrl);
-      const attachment = new AttachmentBuilder(buffer, { name: 'cover.jpg' });
-      await channel.send({ content: text, files: [attachment] });
+      await channel.send({ content: text, files: [new AttachmentBuilder(buffer, { name: 'cover.jpg' })] });
     }
   } catch (e) {
     console.warn('[IMG] Ошибка:', e.message);
@@ -245,33 +186,25 @@ async function sendAnnouncement(channel, text, imageUrl) {
   }
 }
 
-// ─── Ready ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`Бот запущен как ${client.user.tag}`);
   await registerCommands();
 });
 
-// ─── Команды ──────────────────────────────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
 
-  // ── /autochallenge ────────────────────────────────────────────────────────────
   if (commandName === 'autochallenge') {
     await interaction.deferReply({ ephemeral: true });
-
     const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
-    const postId = interaction.options.getString('post_id') || '';
+    const postId   = interaction.options.getString('post_id') || '';
     let tg;
     try {
-      if (postId) {
-        tg = await fetchTelegramPostById(tgHandle, postId);
-      } else {
-        tg = await fetchTelegramPost(tgHandle, ['челлендж', 'challenge', 'тема', 'анимируем', 'присоединяйтесь', 'присылайте']);
-      }
-    } catch (e) {
-      return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
-    }
+      tg = postId
+        ? await fetchTelegramPostById(tgHandle, postId)
+        : await fetchTelegramPost(tgHandle, ['челлендж', 'challenge', 'тема', 'анимируем', 'присоединяйтесь', 'присылайте']);
+    } catch (e) { return interaction.editReply(`❌ Telegram: ${e.message}`); }
 
     const attached = interaction.options.getAttachment('image');
     if (attached) tg.imageUrl = attached.url;
@@ -285,77 +218,68 @@ client.on('interactionCreate', async interaction => {
     const title = allLines[0]?.trim() || '';
     const body  = allLines.slice(1).join('\n').trim();
 
-    const bodyLines = body.split('\n').filter(l => {
-      const t = l.trim();
-      if (t.startsWith('https://discord.com/events')) return false;
-      if (/^(youtube|vk видео|ютуб)/i.test(t)) return false;
-      if (/^youtube\s*\|\s*vk/i.test(t)) return false;
-      return true;
-    });
-    let firstBodyLine = true;
-    const cleanBody = bodyLines.map(l => {
-      if (firstBodyLine && l.trim()) { firstBodyLine = false; return `## ${l.trim()}`; }
+    const cleanBody = body.split('\n')
+      .filter(l => !l.trim().startsWith('https://discord.com/events'))
+      .filter(l => !/^(youtube|vk видео|ютуб)/i.test(l.trim()))
+      .filter(l => !/^youtube\s*\|\s*vk/i.test(l.trim()))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    // Первая непустая строка тела — h2
+    let first = true;
+    const formattedBody = cleanBody.split('\n').map(l => {
+      if (first && l.trim()) { first = false; return `## ${l.trim()}`; }
       return l;
-    }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }).join('\n');
 
     const text = buildChallengeText({
-      title, body: cleanBody,
+      title, body: formattedBody,
       discordUrl: tg.discordUrl || '',
-      mention,
-      roleMention: mention ? null : (config.challengeRoleMention || null)
+      mention, roleMention: mention ? null : (config.challengeRoleMention || null)
     });
 
-    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
-    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
-    await sendAnnouncement(targetChannel, text, tg.imageUrl);
-    await interaction.editReply(`✅ Анонс челленджа опубликован в <#${targetChannel.id}>!`);
+    const ch = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
+    if (!ch) return interaction.editReply('❌ Канал не найден.');
+    await sendAnnouncement(ch, text, tg.imageUrl);
+    await interaction.editReply(`✅ Опубликовано в <#${ch.id}>!`);
   }
 
-  // ── /autosketching ────────────────────────────────────────────────────────────
   if (commandName === 'autosketching') {
     await interaction.deferReply({ ephemeral: true });
-
     const topic    = interaction.options.getString('topic');
     const time     = interaction.options.getString('time') || '17:00';
     const eventUrl = interaction.options.getString('event_url') || '';
+    const postId   = interaction.options.getString('post_id') || '';
     const attached = interaction.options.getAttachment('image');
-    let   mention  = interaction.options.getString('mention') || '';
+    let mention    = interaction.options.getString('mention') || '';
     if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
 
-    const postId = interaction.options.getString('post_id') || '';
-    // Пробуем подтянуть картинку из Telegram если не приложена
     let imageUrl = attached ? attached.url : null;
     if (!imageUrl) {
       try {
         const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
-        if (postId) {
-          const tg = await fetchTelegramPostById(tgHandle, postId);
-          if (tg.imageUrl) imageUrl = tg.imageUrl;
-        } else {
-          const tg = await fetchTelegramPost(tgHandle, ['скетчинг', 'sketching', 'персонаж', 'рисовать', 'наброски', 'live sketching']);
-          if (tg.imageUrl) imageUrl = tg.imageUrl;
-        }
-      } catch (e) {
-        console.warn('[TG] Обложка скетчинга не найдена:', e.message);
-      }
+        const tg = postId
+          ? await fetchTelegramPostById(tgHandle, postId)
+          : await fetchTelegramPost(tgHandle, ['скетчинг', 'sketching', 'персонаж', 'рисовать', 'наброски', 'live sketching']);
+        if (tg.imageUrl) imageUrl = tg.imageUrl;
+      } catch (e) { console.warn('[TG] Обложка не найдена:', e.message); }
     }
 
     const text = buildSketchingText({
       topic, time,
-      discordUrl:     eventUrl || config.sketchingEventUrl || '',
+      discordUrl: eventUrl || config.sketchingEventUrl || '',
       sketchChannelId: config.sketchingChannelId || '',
-      telegramUrl:    config.telegramChannel || 'https://t.me/animationclub_challange',
-      mention,
-      roleMention: mention ? null : (config.sketchingRoleMention || config.challengeRoleMention || null)
+      telegramUrl: config.telegramChannel || 'https://t.me/animationclub_challange',
+      mention, roleMention: mention ? null : (config.sketchingRoleMention || config.challengeRoleMention || null)
     });
 
-    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.sketchingAnnounceChannelId || config.announceChannelId);
-    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
-    await sendAnnouncement(targetChannel, text, imageUrl);
-    await interaction.editReply(`✅ Анонс скетчинга опубликован в <#${targetChannel.id}>!`);
+    const ch = interaction.options.getChannel('channel') || client.channels.cache.get(config.sketchingAnnounceChannelId || config.announceChannelId);
+    if (!ch) return interaction.editReply('❌ Канал не найден.');
+    await sendAnnouncement(ch, text, imageUrl);
+    await interaction.editReply(`✅ Опубликовано в <#${ch.id}>!`);
   }
 
-  // ── /challenge ────────────────────────────────────────────────────────────────
   if (commandName === 'challenge') {
     const title      = interaction.options.getString('title');
     const body       = interaction.options.getString('body');
@@ -363,9 +287,7 @@ client.on('interactionCreate', async interaction => {
     let   imageUrl   = interaction.options.getString('image_url') || '';
     const attached   = interaction.options.getAttachment('image');
     let   mention    = interaction.options.getString('mention') || '';
-
     await interaction.deferReply({ ephemeral: true });
-
     if (attached) imageUrl = attached.url;
     if (!imageUrl) {
       try {
@@ -374,30 +296,19 @@ client.on('interactionCreate', async interaction => {
         if (tg.imageUrl) imageUrl = tg.imageUrl;
       } catch (e) { console.warn('[TG] Обложка не найдена:', e.message); }
     }
-
     if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
-
-    const text = buildChallengeText({
-      title, body, discordUrl, mention,
-      roleMention: mention ? null : (config.challengeRoleMention || null)
-    });
-
-    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
-    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
-    await sendAnnouncement(targetChannel, text, imageUrl);
-    await interaction.editReply(`✅ Анонс опубликован в <#${targetChannel.id}>!`);
+    const text = buildChallengeText({ title, body, discordUrl, mention, roleMention: mention ? null : (config.challengeRoleMention || null) });
+    const ch = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
+    if (!ch) return interaction.editReply('❌ Канал не найден.');
+    await sendAnnouncement(ch, text, imageUrl);
+    await interaction.editReply(`✅ Опубликовано в <#${ch.id}>!`);
   }
 
-  // ── /challengeend ─────────────────────────────────────────────────────────────
   if (commandName === 'challengeend') {
-    const channel = client.channels.cache.get(config.announceChannelId);
-    if (!channel) return interaction.reply({ content: '❌ Канал не найден.', ephemeral: true });
-    const roleMention = config.challengeRoleMention || '';
-    await channel.send(
-      (roleMention ? `-# ${roleMention}\n` : '') +
-      `## ⏰ Приём работ завершён!\n` +
-      `Спасибо всем участникам — ждём ваши анимации! Результаты объявим совсем скоро 🎉`
-    );
+    const ch = client.channels.cache.get(config.announceChannelId);
+    if (!ch) return interaction.reply({ content: '❌ Канал не найден.', ephemeral: true });
+    const role = config.challengeRoleMention || '';
+    await ch.send((role ? `-# ${role}\n` : '') + `## ⏰ Приём работ завершён!\nСпасибо всем участникам — ждём ваши анимации! Результаты объявим совсем скоро 🎉`);
     await interaction.reply({ content: '✅ Отправлено.', ephemeral: true });
   }
 });
