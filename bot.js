@@ -26,13 +26,15 @@ const commands = [
     .addStringOption(o => o.setName('youtube_url')  .setDescription('Ссылка YouTube').setRequired(false))
     .addStringOption(o => o.setName('vk_url')       .setDescription('Ссылка VK Видео').setRequired(false))
     .addStringOption(o => o.setName('image_url')    .setDescription('URL обложки (если не заполнено — берётся из Telegram)').setRequired(false))
-    .addChannelOption(o => o.setName('channel')     .setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false)),
+    .addChannelOption(o => o.setName('channel')     .setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false))
+    .addStringOption(o => o.setName('mention')      .setDescription('Тег роли или пользователя, напр. @everyone или <@&123456>').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('autoannounce')
     .setDescription('Подтянуть последний анонс стрима из Telegram и опубликовать')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false)),
+    .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false))
+    .addStringOption(o => o.setName('mention').setDescription('Тег роли или пользователя, напр. @everyone или <@&123456>').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('streamend')
@@ -256,8 +258,10 @@ client.on('interactionCreate', async interaction => {
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
 
-    await sendAnnouncement(targetChannel, text, imageUrl);
-    await interaction.editReply(`✅ Анонс опубликован в <#${config.announceChannelId}>!`);
+    const mention = interaction.options.getString('mention') || '';
+    const finalText = mention ? `${mention}\n${text}` : text;
+    await sendAnnouncement(targetChannel, finalText, imageUrl);
+    await interaction.editReply(`✅ Анонс опубликован в <#${targetChannel.id}>!`);
   }
 
   // ── /autoannounce ─────────────────────────────────────────────────────────────
@@ -290,15 +294,16 @@ client.on('interactionCreate', async interaction => {
     if (tg.vkUrl)   links.push(`**[VK Видео](${tg.vkUrl})**`);
 
     // Первая строка текста — заголовок (делаем крупным через #)
-    const lines = tg.text.split('\n').filter(l => l.trim());
-    const title = lines[0] || '';
-    const body = lines.slice(1).join('\n').trim();
+    const allLines = tg.text.split('\n');
+    const title = allLines[0]?.trim() || '';
+    const body = allLines.slice(1).join('\n').trim();
 
     // Убираем строки "YouTube | VK Видео" из тела — они дублируют ссылки
     const cleanBody = body
       .split('\n')
       .filter(l => !/^(youtube|vk видео|ютуб)/i.test(l.trim()) && !/^youtube\s*\|\s*vk/i.test(l.trim()))
       .join('\n')
+      .replace(/\n{3,}/g, '\n\n') // максимум одна пустая строка
       .trim();
 
     let text = `-# ${roleMention}\n`;
@@ -309,9 +314,11 @@ client.on('interactionCreate', async interaction => {
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
 
-    await sendAnnouncement(targetChannel, text, tg.imageUrl);
+    const mention = interaction.options.getString('mention') || '';
+    const finalText = mention ? `${mention}\n${text}` : text;
+    await sendAnnouncement(targetChannel, finalText, tg.imageUrl);
     await interaction.editReply(
-      `✅ Автоанонс опубликован в <#${config.announceChannelId}>!` +
+      `✅ Автоанонс опубликован в <#${targetChannel.id}>!` +
       (tg.imageUrl ? '\n🖼 Обложка подтянута из Telegram.' : '\n⚠️ Обложка не найдена.')
     );
   }
