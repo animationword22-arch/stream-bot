@@ -1,8 +1,9 @@
 const {
   Client, GatewayIntentBits, PermissionFlagsBits,
-  SlashCommandBuilder, REST, Routes
+  SlashCommandBuilder, REST, Routes, EmbedBuilder
 } = require('discord.js');
 const https = require('https');
+const http  = require('http');
 const config = require('./config.json');
 // Токен берётся из переменной окружения Railway (TOKEN), config.json его не содержит
 config.token = process.env.TOKEN || config.token || '';
@@ -13,7 +14,6 @@ const client = new Client({
 
 // ─── Slash-команды ────────────────────────────────────────────────────────────
 const commands = [
-
   new SlashCommandBuilder()
     .setName('announce')
     .setDescription('Опубликовать анонс стрима в канал')
@@ -40,7 +40,6 @@ const commands = [
   new SlashCommandBuilder()
     .setName('schedule')
     .setDescription('Показать расписание стримов'),
-
 ].map(c => c.toJSON());
 
 // ─── Регистрация ──────────────────────────────────────────────────────────────
@@ -53,8 +52,8 @@ async function registerCommands() {
   } catch (e) { console.error('Ошибка регистрации:', e); }
 }
 
-// ─── Форматирование анонса ────────────────────────────────────────────────────
-function buildAnnouncement({ title, speaker, speakerRole, points, outro, youtubeUrl, vkUrl, imageUrl }) {
+// ─── Форматирование текста анонса ─────────────────────────────────────────────
+function buildAnnouncement({ title, speaker, speakerRole, points, outro, youtubeUrl, vkUrl }) {
   const roleMention = config.streamRoleMention || '@Stream Events';
 
   let text = `-# ${roleMention}\n`;
@@ -70,31 +69,26 @@ function buildAnnouncement({ title, speaker, speakerRole, points, outro, youtube
     text += points.map(p => `— ${p.trim()}`).join('\n') + '\n';
   }
 
-  if (outro) {
-    text += `\n${outro}\n`;
-  }
+  if (outro) text += `\n${outro}\n`;
 
   const links = [];
   if (youtubeUrl) links.push(`**[YouTube](${youtubeUrl})**`);
   if (vkUrl)      links.push(`**[VK Видео](${vkUrl})**`);
-  if (links.length) text += `\n${links.join(' | ')}\n`;
-
-  // Обложка — Discord разворачивает прямую ссылку на картинку в превью
-  if (imageUrl) text += `\n${imageUrl}`;
+  if (links.length) text += `\n${links.join(' | ')}`;
 
   return text;
 }
 
-// ─── HTTP fetch ───────────────────────────────────────────────────────────────
+// ─── HTTP fetch (текст) ───────────────────────────────────────────────────────
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; StreamBot/1.0)',
         'Accept-Language': 'ru-RU,ru;q=0.9',
       }
     }, res => {
-      // Следуем редиректам
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return fetchUrl(res.headers.location).then(resolve).catch(reject);
       }
@@ -107,27 +101,41 @@ function fetchUrl(url) {
   });
 }
 
+// ─── Скачать картинку как Buffer ──────────────────────────────────────────────
+function fetchImageBuffer(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StreamBot/1.0)' }
+    }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchImageBuffer(res.headers.location).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
 // ─── Парсинг Telegram-канала ──────────────────────────────────────────────────
-// Публичная веб-версия: https://t.me/s/<channel>
-// Каждый пост — блок <div class="tgme_widget_message_wrap ...">
-// Картинки в <a style="background-image:url('...')"> или <img src="...">
 async function fetchTelegramStreamPost(channelHandle) {
-  // channelHandle: 'animationschool_ru'
   console.log(`[TG] Fetching t.me/s/${channelHandle}...`);
   const html = await fetchUrl(`https://t.me/s/${channelHandle}`);
   console.log(`[TG] Got ${html.length} bytes`);
 
-  // Разбиваем на блоки постов
   const postBlocks = [...html.matchAll(
     /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
   )].map(m => m[0]);
 
-  // Ищем последний пост, упоминающий стрим
+  console.log(`[TG] Found ${postBlocks.length} post blocks`);
+
   const streamKeywords = ['стрим', 'стримим', 'прямой эфир', 'stream events', 'подключайся'];
   const streamRegex = new RegExp(streamKeywords.join('|'), 'i');
 
   let targetPost = null;
-  // Посты идут от старых к новым — перебираем с конца
   for (let i = postBlocks.length - 1; i >= 0; i--) {
     if (streamRegex.test(postBlocks[i])) {
       targetPost = postBlocks[i];
@@ -135,59 +143,65 @@ async function fetchTelegramStreamPost(channelHandle) {
     }
   }
 
-  if (!targetPost) throw new Error('Пост про стрим не найден в последних сообщениях канала');
+  if (!targetPost) throw new Error('Пост про стрим не найден');
 
-  // Извлекаем картинку — формат: background-image:url('...')  или  <img src="...">
+  // Картинка — ищем background-image в style
   let imageUrl = null;
-
   const bgMatch = targetPost.match(/background-image:url\('([^']+)'\)/);
   if (bgMatch) imageUrl = bgMatch[1];
-
   if (!imageUrl) {
     const imgMatch = targetPost.match(/<img[^>]+src="([^"]+)"/);
     if (imgMatch) imageUrl = imgMatch[1];
   }
 
-  // Извлекаем текст (без HTML-тегов)
+  console.log(`[TG] Image URL: ${imageUrl}`);
+
   const textRaw = targetPost
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").trim();
 
-  // Ссылки — ищем youtube и vk
-  const ytMatch  = targetPost.match(/href="(https?:\/\/(?:www\.)?youtube[^"]+)"/);
-  const vkMatch  = targetPost.match(/href="(https?:\/\/(?:www\.)?vkvideo[^"]+|https?:\/\/vk\.com\/video[^"]+)"/);
+  const ytMatch = targetPost.match(/href="(https?:\/\/(?:www\.)?youtube[^"]+)"/);
+  const vkMatch = targetPost.match(/href="(https?:\/\/(?:www\.)?vkvideo[^"]+|https?:\/\/vk\.com\/video[^"]+)"/);
 
   return {
-    text:       textRaw,
-    imageUrl:   imageUrl || null,
-    youtubeUrl: ytMatch  ? ytMatch[1]  : null,
-    vkUrl:      vkMatch  ? vkMatch[1]  : null,
+    text: textRaw,
+    imageUrl: imageUrl || null,
+    youtubeUrl: ytMatch ? ytMatch[1] : null,
+    vkUrl: vkMatch ? vkMatch[1] : null,
   };
 }
 
-// ─── Парсинг YouTube RSS (для автоматического получения ссылки на стрим) ──────
+// ─── Парсинг YouTube RSS ──────────────────────────────────────────────────────
 async function fetchLatestYoutubeStream(channelHandle) {
   const pageHtml = await fetchUrl(`https://www.youtube.com/${channelHandle}`);
   const cidMatch = pageHtml.match(/"channelId":"(UC[^"]+)"/);
-  if (!cidMatch) throw new Error('Не удалось найти channelId на странице YouTube');
+  if (!cidMatch) throw new Error('Не удалось найти channelId');
   const channelId = cidMatch[1];
-
-  const rss     = await fetchUrl(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
+  const rss = await fetchUrl(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
   const entries = [...rss.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
-  if (!entries.length) throw new Error('RSS-лента YouTube пустая');
-
-  const entry    = entries[0][1];
-  const title    = (entry.match(/<title>(.*?)<\/title>/)             || [])[1] || 'Стрим';
+  if (!entries.length) throw new Error('RSS пустой');
+  const entry = entries[0][1];
   const videoUrl = (entry.match(/<link rel="alternate" href="([^"]+)"/) || [])[1] || '';
-  const published= (entry.match(/<published>(.*?)<\/published>/)     || [])[1] || '';
+  return { videoUrl };
+}
 
-  return { title, videoUrl, published };
+// ─── Отправить анонс с картинкой-вложением ────────────────────────────────────
+async function sendAnnouncement(channel, text, imageUrl) {
+  if (!imageUrl) {
+    await channel.send({ content: text });
+    return;
+  }
+  try {
+    // Embed показывает картинку в полном качестве прямо под текстом
+    const embed = new EmbedBuilder().setImage(imageUrl).setColor(0x2B2D31);
+    await channel.send({ content: text, embeds: [embed] });
+  } catch (e) {
+    console.warn('[IMG] Не удалось отправить с картинкой:', e.message);
+    await channel.send({ content: text });
+  }
 }
 
 // ─── Ready ────────────────────────────────────────────────────────────────────
@@ -203,8 +217,6 @@ client.on('interactionCreate', async interaction => {
 
   // ── /announce ────────────────────────────────────────────────────────────────
   if (commandName === 'announce') {
-    await interaction.deferReply({ ephemeral: true });
-
     const title       = interaction.options.getString('title');
     const speaker     = interaction.options.getString('speaker');
     const speakerRole = interaction.options.getString('speaker_role') || '';
@@ -214,28 +226,26 @@ client.on('interactionCreate', async interaction => {
     const vkUrl       = interaction.options.getString('vk_url') || '';
     let   imageUrl    = interaction.options.getString('image_url') || '';
 
-    // Если обложка не указана — тянем из Telegram
+    await interaction.deferReply({ ephemeral: true });
+
     if (!imageUrl) {
       try {
         const tgHandle = (config.telegramChannel || 'https://t.me/animationschool_ru')
           .replace(/^https?:\/\/t\.me\//, '');
         const tg = await fetchTelegramStreamPost(tgHandle);
-        if (tg.imageUrl) {
-          imageUrl = tg.imageUrl;
-          console.log(`Обложка подтянута из Telegram: ${imageUrl}`);
-        }
+        if (tg.imageUrl) imageUrl = tg.imageUrl;
       } catch (e) {
-        console.warn('Не удалось подтянуть обложку из Telegram:', e.message);
+        console.warn('[TG] Не удалось подтянуть обложку:', e.message);
       }
     }
 
     const points = pointsRaw ? pointsRaw.split(';').filter(Boolean) : [];
-    const text   = buildAnnouncement({ title, speaker, speakerRole, points, outro, youtubeUrl, vkUrl, imageUrl });
+    const text   = buildAnnouncement({ title, speaker, speakerRole, points, outro, youtubeUrl, vkUrl });
 
     const channel = client.channels.cache.get(config.announceChannelId);
-    if (!channel) return interaction.editReply('❌ Канал не найден. Проверь `announceChannelId` в config.json.');
+    if (!channel) return interaction.editReply('❌ Канал не найден.');
 
-    await channel.send({ content: text });
+    await sendAnnouncement(channel, text, imageUrl);
     await interaction.editReply(`✅ Анонс опубликован в <#${config.announceChannelId}>!`);
   }
 
@@ -246,16 +256,13 @@ client.on('interactionCreate', async interaction => {
     const tgHandle = (config.telegramChannel || 'https://t.me/animationschool_ru')
       .replace(/^https?:\/\/t\.me\//, '');
 
-    // 1. Тянем пост из Telegram (текст + обложка + ссылки)
     let tg;
     try {
       tg = await fetchTelegramStreamPost(tgHandle);
     } catch (e) {
-      console.error(e);
       return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
     }
 
-    // 2. Если в Telegram нет ссылки на YouTube — берём из RSS
     let youtubeUrl = tg.youtubeUrl || '';
     if (!youtubeUrl && config.youtubeChannelHandle) {
       try {
@@ -266,24 +273,22 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    // 3. Собираем сообщение из текста поста как есть + ссылки + обложка
     const roleMention = config.streamRoleMention || '@Stream Events';
     const links = [];
-    if (youtubeUrl)  links.push(`**[YouTube](${youtubeUrl})**`);
-    if (tg.vkUrl)    links.push(`**[VK Видео](${tg.vkUrl})**`);
+    if (youtubeUrl) links.push(`**[YouTube](${youtubeUrl})**`);
+    if (tg.vkUrl)   links.push(`**[VK Видео](${tg.vkUrl})**`);
 
     let text = `-# ${roleMention}\n`;
-    text += tg.text + '\n';
-    if (links.length) text += `\n${links.join(' | ')}\n`;
-    if (tg.imageUrl)  text += `\n${tg.imageUrl}`;
+    text += tg.text;
+    if (links.length) text += `\n\n${links.join(' | ')}`;
 
     const channel = client.channels.cache.get(config.announceChannelId);
     if (!channel) return interaction.editReply('❌ Канал не найден.');
 
-    await channel.send({ content: text });
+    await sendAnnouncement(channel, text, tg.imageUrl);
     await interaction.editReply(
       `✅ Автоанонс опубликован в <#${config.announceChannelId}>!` +
-      (tg.imageUrl ? '\n🖼 Обложка подтянута из Telegram.' : '\n⚠️ Обложка не найдена в посте.')
+      (tg.imageUrl ? '\n🖼 Обложка подтянута из Telegram.' : '\n⚠️ Обложка не найдена.')
     );
   }
 
@@ -291,11 +296,9 @@ client.on('interactionCreate', async interaction => {
   if (commandName === 'streamend') {
     const channel = client.channels.cache.get(config.announceChannelId);
     if (!channel) return interaction.reply({ content: '❌ Канал не найден.', ephemeral: true });
-
     const roleMention = config.streamRoleMention || '@Stream Events';
     await channel.send(
-      `-# ${roleMention}\n` +
-      `## ⚫ Стрим завершён\n` +
+      `-# ${roleMention}\n## ⚫ Стрим завершён\n` +
       `Спасибо всем, кто был с нами! Запись скоро появится на канале. До следующего раза 👋`
     );
     await interaction.reply({ content: '✅ Отправлено.', ephemeral: true });
@@ -305,12 +308,10 @@ client.on('interactionCreate', async interaction => {
   if (commandName === 'schedule') {
     const schedule = config.schedule || [];
     if (!schedule.length)
-      return interaction.reply({ content: '📅 Расписание пустое. Добавь записи в `config.json`.', ephemeral: true });
-
+      return interaction.reply({ content: '📅 Расписание пустое.', ephemeral: true });
     const lines = schedule.map((s, i) =>
       `**${i + 1}.** ${s.day} • ${s.time} — **${s.title}**`
     ).join('\n');
-
     await interaction.reply({ content: `## 📅 Расписание стримов\n${lines}` });
   }
 });
