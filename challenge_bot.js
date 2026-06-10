@@ -154,7 +154,7 @@ function buildChallengeText({ title, body, discordUrl, mention, roleMention }) {
   else if (roleMention) text += `${roleMention}\n`;
   if (title) text += `# ${title}\n`;
   if (body) text += body;
-  if (discordUrl) text += `\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
+  if (discordUrl) text += `\n\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
   return text.trim();
 }
 
@@ -173,7 +173,7 @@ function buildSketchingText({ topic, time, discordUrl, sketchChannelId, telegram
   text += `Нужно будет рисовать наброски или анатомию в любых техниках, в которых захотите. Референсы для рисования будут в ${sketchChannel}, туда же можно выкладывать свои работы. Или под соответствующим постом в [телеграме](${tgLink}) в комментариях!`;
 
   if (discordUrl) {
-    text += `\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
+    text += `\n\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${discordUrl}`;
   }
 
   return text.trim();
@@ -231,12 +231,18 @@ client.on('interactionCreate', async interaction => {
     const title = allLines[0]?.trim() || '';
     const body  = allLines.slice(1).join('\n').trim();
 
-    const bodyLines = body.split('\n').filter(l => !l.trim().startsWith('https://discord.com/events'));
+    const bodyLines = body.split('\n').filter(l => {
+      const t = l.trim();
+      if (t.startsWith('https://discord.com/events')) return false;
+      if (/^(youtube|vk видео|ютуб)/i.test(t)) return false;
+      if (/^youtube\s*\|\s*vk/i.test(t)) return false;
+      return true;
+    });
     let firstBodyLine = true;
     const cleanBody = bodyLines.map(l => {
       if (firstBodyLine && l.trim()) { firstBodyLine = false; return `## ${l.trim()}`; }
       return l;
-    }).join('\n').trim();
+    }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
     const text = buildChallengeText({
       title, body: cleanBody,
