@@ -1,6 +1,9 @@
 {
   "clientId": "1514213530310672464",
   "announceChannelId": "1430848111189692556",
-  "challengeRoleMention": "@AnimationChallenge",
+  "challengeRoleMention": "<@&1033406084595068928>",
+  "sketchingRoleMention": "<@&1085160176732090528>",
+  "sketchingChannelId": "1358761596842672138",
+  "sketchingAnnounceChannelId": "1430848111189692556",
   "telegramChannel": "https://t.me/animationclub_challange"
 }
