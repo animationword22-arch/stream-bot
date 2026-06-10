@@ -26,6 +26,7 @@ const commands = [
     .addStringOption(o => o.setName('youtube_url')  .setDescription('Ссылка YouTube').setRequired(false))
     .addStringOption(o => o.setName('vk_url')       .setDescription('Ссылка VK Видео').setRequired(false))
     .addStringOption(o => o.setName('image_url')    .setDescription('URL обложки (если не заполнено — берётся из Telegram)').setRequired(false))
+    .addAttachmentOption(o => o.setName('image')    .setDescription('Загрузить обложку напрямую (приоритет над URL и Telegram)').setRequired(false))
     .addChannelOption(o => o.setName('channel')     .setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false))
     .addStringOption(o => o.setName('mention')      .setDescription('Тег роли или пользователя, напр. @everyone или <@&123456>').setRequired(false)),
 
@@ -33,6 +34,7 @@ const commands = [
     .setName('autoannounce')
     .setDescription('Подтянуть последний анонс стрима из Telegram и опубликовать')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addAttachmentOption(o => o.setName('image').setDescription('Обложка стрима (если не загружена — берётся из Telegram)').setRequired(false))
     .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false))
     .addStringOption(o => o.setName('mention').setDescription('Тег роли или пользователя, напр. @everyone или <@&123456>').setRequired(false)),
 
@@ -149,19 +151,22 @@ async function fetchTelegramStreamPost(channelHandle) {
 
   if (!targetPost) throw new Error('Пост про стрим не найден');
 
-  // Картинка — ищем все background-image, берём самую большую (последнюю в посте)
+  // Картинка — ищем только в блоке фото поста (tgme_widget_message_photo_wrap)
   let imageUrl = null;
-  const bgMatches = [...targetPost.matchAll(/background-image:url\('([^']+)'\)/g)];
-  if (bgMatches.length > 0) {
-    // Последний background-image обычно самый большой
-    imageUrl = bgMatches[bgMatches.length - 1][1];
+  const photoWrapMatch = targetPost.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
+  if (photoWrapMatch) {
+    imageUrl = photoWrapMatch[1];
   }
+  // Запасной вариант — любой background-image из блока с cdn4/cdn5 (не youtube/vk)
   if (!imageUrl) {
-    const imgMatch = targetPost.match(/<img[^>]+src="([^"]+)"/);
-    if (imgMatch) imageUrl = imgMatch[1];
+    const bgMatches = [...targetPost.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
+    for (const m of bgMatches) {
+      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) {
+        imageUrl = m[1];
+        break;
+      }
+    }
   }
-  // Убираем размерные параметры из URL чтобы получить оригинал
-  if (imageUrl) imageUrl = imageUrl.replace(/\/s\d+\//, '/');
 
   console.log(`[TG] Image URL: ${imageUrl}`);
 
@@ -212,10 +217,15 @@ async function sendAnnouncement(channel, text, imageUrl) {
     return;
   }
   try {
-    const buffer = await fetchImageBuffer(imageUrl);
-    const attachment = new AttachmentBuilder(buffer, { name: 'cover.jpg' });
-    // Текст + картинка как файл = полное качество без сжатия
-    await channel.send({ content: text, files: [attachment] });
+    // Если это уже Discord CDN — отправляем напрямую по URL (без скачивания, оригинальное качество)
+    if (imageUrl.includes('cdn.discordapp.com') || imageUrl.includes('media.discordapp.net')) {
+      await channel.send({ content: text, files: [{ attachment: imageUrl, name: 'cover.jpg' }] });
+    } else {
+      // Для Telegram и других источников — скачиваем и прикрепляем
+      const buffer = await fetchImageBuffer(imageUrl);
+      const attachment = new AttachmentBuilder(buffer, { name: 'cover.jpg' });
+      await channel.send({ content: text, files: [attachment] });
+    }
   } catch (e) {
     console.warn('[IMG] Не удалось отправить с картинкой:', e.message);
     await channel.send({ content: text });
@@ -246,7 +256,11 @@ client.on('interactionCreate', async interaction => {
 
     await interaction.deferReply({ ephemeral: true });
 
-    if (!imageUrl) {
+    // Приоритет: прикреплённый файл > image_url > Telegram
+    const attachedImage = interaction.options.getAttachment('image');
+    if (attachedImage) {
+      imageUrl = attachedImage.url;
+    } else if (!imageUrl) {
       try {
         const tgHandle = (config.telegramChannel || 'https://t.me/animationschool_ru')
           .replace(/^https?:\/\/t\.me\//, '');
@@ -288,6 +302,10 @@ client.on('interactionCreate', async interaction => {
     } catch (e) {
       return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
     }
+
+    // Если прикреплена картинка — используем её вместо Telegram
+    const attachedImage = interaction.options.getAttachment('image');
+    if (attachedImage) tg.imageUrl = attachedImage.url;
 
     let youtubeUrl = tg.youtubeUrl || '';
     if (!youtubeUrl && config.youtubeChannelHandle) {
