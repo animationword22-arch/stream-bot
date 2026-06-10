@@ -31,7 +31,8 @@ const commands = [
   new SlashCommandBuilder()
     .setName('autoannounce')
     .setDescription('Подтянуть последний анонс стрима из Telegram и опубликовать')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('streamend')
@@ -283,10 +284,10 @@ client.on('interactionCreate', async interaction => {
     text += tg.text;
     if (links.length) text += `\n\n${links.join(' | ')}`;
 
-    const channel = client.channels.cache.get(config.announceChannelId);
-    if (!channel) return interaction.editReply('❌ Канал не найден.');
+    const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
+    if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
 
-    await sendAnnouncement(channel, text, tg.imageUrl);
+    await sendAnnouncement(targetChannel, text, tg.imageUrl);
     await interaction.editReply(
       `✅ Автоанонс опубликован в <#${config.announceChannelId}>!` +
       (tg.imageUrl ? '\n🖼 Обложка подтянута из Telegram.' : '\n⚠️ Обложка не найдена.')
