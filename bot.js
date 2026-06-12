@@ -206,10 +206,20 @@ async function fetchTelegramStreamPost(channelHandle) {
 // ─── Парсинг конкретного поста Telegram по ID ────────────────────────────────
 async function fetchTelegramPostById(channelHandle, postId) {
   console.log(`[TG] Fetching post ${postId}...`);
-  const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${parseInt(postId) + 1}`);
-  const postBlocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
-  const target = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`)) || postBlocks[postBlocks.length - 1];
-  if (!target) throw new Error('Пост не найден');
+  // Пробуем разные значения before чтобы найти нужный пост
+  const candidates = [
+    parseInt(postId) + 1,
+    parseInt(postId) + 5,
+    parseInt(postId) + 10,
+  ];
+  let target = null;
+  for (const before of candidates) {
+    const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${before}`);
+    const postBlocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
+    target = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`));
+    if (target) break;
+  }
+  if (!target) throw new Error(`Пост ${postId} не найден`);
 
   // Берём все текстовые блоки — выбираем самый длинный (основной текст)
   const allTextMatches = [...target.matchAll(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g)];
