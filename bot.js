@@ -138,7 +138,7 @@ async function fetchTelegramStreamPost(channelHandle) {
 
   console.log(`[TG] Found ${postBlocks.length} post blocks`);
 
-  const streamKeywords = ['стрим', 'стримим', 'прямой эфир', 'stream events', 'подключайся'];
+  const streamKeywords = ['стрим', 'стримим', 'прямой эфир', 'stream events', 'подключайся', 'подключайтесь', 'ревью', 'разбор', 'итоги', 'смотреть', 'начало в'];
   const streamRegex = new RegExp(streamKeywords.join('|'), 'i');
 
   let targetPost = null;
@@ -194,6 +194,43 @@ async function fetchTelegramStreamPost(channelHandle) {
     youtubeUrl: ytMatch ? ytMatch[1] : null,
     vkUrl: vkMatch ? vkMatch[1] : null,
   };
+}
+
+// ─── Парсинг конкретного поста Telegram по ID ────────────────────────────────
+async function fetchTelegramPostById(channelHandle, postId) {
+  console.log(`[TG] Fetching post ${postId}...`);
+  const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${parseInt(postId) + 1}`);
+  const postBlocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
+  const target = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`)) || postBlocks[postBlocks.length - 1];
+  if (!target) throw new Error('Пост не найден');
+
+  let textRaw = '';
+  const msgTextMatch = target.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+  if (msgTextMatch) {
+    textRaw = msgTextMatch[1]
+      .replace(/<br[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  let imageUrl = null;
+  const photoMatch = target.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
+  if (photoMatch) imageUrl = photoMatch[1];
+  if (!imageUrl) {
+    const bgMatches = [...target.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
+    for (const m of bgMatches) {
+      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) { imageUrl = m[1]; break; }
+    }
+  }
+
+  const ytMatch = target.match(/href="(https?:\/\/(?:www\.)?youtube[^"]+)"/);
+  const vkMatch = target.match(/href="(https?:\/\/(?:www\.)?vkvideo[^"]+|https?:\/\/vk\.com\/video[^"]+)"/);
+
+  return { text: textRaw, imageUrl: imageUrl || null, youtubeUrl: ytMatch ? ytMatch[1] : null, vkUrl: vkMatch ? vkMatch[1] : null };
 }
 
 // ─── Парсинг YouTube RSS ──────────────────────────────────────────────────────
