@@ -32,11 +32,12 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('autoannounce')
-    .setDescription('Подтянуть последний анонс стрима из Telegram и опубликовать')
+    .setDescription('Подтянуть анонс стрима из Telegram и опубликовать')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption(o => o.setName('post_url').setDescription('Ссылка на пост в Telegram, напр. https://t.me/animationschool_ru/18015').setRequired(false))
     .addAttachmentOption(o => o.setName('image').setDescription('Обложка стрима (если не загружена — берётся из Telegram)').setRequired(false))
-    .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации (по умолчанию — основной из config)').setRequired(false))
-    .addStringOption(o => o.setName('mention').setDescription('Тег роли или пользователя, напр. @everyone или <@&123456>').setRequired(false)),
+    .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации').setRequired(false))
+    .addStringOption(o => o.setName('mention').setDescription('Тег роли или пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('streamend')
@@ -336,8 +337,11 @@ client.on('interactionCreate', async interaction => {
   if (commandName === 'autoannounce') {
     await interaction.deferReply({ ephemeral: true });
 
+    const postUrlRaw = interaction.options.getString('post_url') || '';
     const tgHandle = (config.telegramChannel || 'https://t.me/animationschool_ru')
       .replace(/^https?:\/\/t\.me\//, '');
+    const postIdMatch = postUrlRaw.match(/(\d+)$/);
+    const postId = postIdMatch ? postIdMatch[1] : '';
 
     let tg;
     try {
