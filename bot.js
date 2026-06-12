@@ -128,28 +128,34 @@ function fetchImageBuffer(url) {
 
 // ─── Парсинг Telegram-канала ──────────────────────────────────────────────────
 async function fetchTelegramStreamPost(channelHandle) {
-  console.log(`[TG] Fetching t.me/s/${channelHandle}...`);
-  const html = await fetchUrl(`https://t.me/s/${channelHandle}`);
-  console.log(`[TG] Got ${html.length} bytes`);
-
-  const postBlocks = [...html.matchAll(
-    /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
-  )].map(m => m[0]);
-
-  console.log(`[TG] Found ${postBlocks.length} post blocks`);
-
-  const streamKeywords = ['стрим', 'стримим', 'прямой эфир', 'stream events', 'подключайся', 'подключайтесь', 'ревью', 'разбор', 'итоги', 'смотреть', 'начало в'];
-  const streamRegex = new RegExp(streamKeywords.join('|'), 'i');
-
-  let targetPost = null;
-  for (let i = postBlocks.length - 1; i >= 0; i--) {
-    if (streamRegex.test(postBlocks[i])) {
-      targetPost = postBlocks[i];
-      break;
-    }
+  // Загружаем 3 страницы (~60 постов)
+  let allBlocks = [];
+  let beforeId = '';
+  for (let page = 0; page < 3; page++) {
+    const url = beforeId
+      ? `https://t.me/s/${channelHandle}?before=${beforeId}`
+      : `https://t.me/s/${channelHandle}`;
+    console.log(`[TG] Fetching page ${page + 1}: ${url}`);
+    const html = await fetchUrl(url);
+    console.log(`[TG] Got ${html.length} bytes`);
+    const blocks = [...html.matchAll(
+      /<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g
+    )].map(m => m[0]);
+    if (!blocks.length) break;
+    allBlocks = [...blocks, ...allBlocks];
+    const ids = [...html.matchAll(/data-post="[^/]+\/(\d+)"/g)].map(m => parseInt(m[1]));
+    if (!ids.length) break;
+    beforeId = Math.min(...ids).toString();
   }
 
-  if (!targetPost) throw new Error('Пост про стрим не найден');
+  if (!allBlocks.length) throw new Error('Посты не найдены');
+
+  // Берём последний пост с картинкой
+  let targetPost = null;
+  for (let i = allBlocks.length - 1; i >= 0; i--) {
+    if (allBlocks[i].includes('tgme_widget_message_photo_wrap')) { targetPost = allBlocks[i]; break; }
+  }
+  if (!targetPost) targetPost = allBlocks[allBlocks.length - 1];
 
   // Картинка — ищем только в блоке фото поста (tgme_widget_message_photo_wrap)
   let imageUrl = null;
