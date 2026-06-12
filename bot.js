@@ -34,7 +34,7 @@ const commands = [
     .setName('autoannounce')
     .setDescription('Подтянуть анонс стрима из Telegram и опубликовать')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('post_url').setDescription('Ссылка на пост в Telegram, напр. https://t.me/animationschool_ru/18015').setRequired(false))
+    .addStringOption(o => o.setName('post_url').setDescription('Ссылка на пост в Telegram, напр. https://t.me/animationschool_ru/18015').setRequired(true))
     .addAttachmentOption(o => o.setName('image').setDescription('Обложка стрима (если не загружена — берётся из Telegram)').setRequired(false))
     .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации').setRequired(false))
     .addStringOption(o => o.setName('mention').setDescription('Тег роли или пользователя').setRequired(false)),
@@ -211,18 +211,22 @@ async function fetchTelegramPostById(channelHandle, postId) {
   const target = postBlocks.find(p => p.includes(`/${channelHandle}/${postId}`)) || postBlocks[postBlocks.length - 1];
   if (!target) throw new Error('Пост не найден');
 
-  let textRaw = '';
-  const msgTextMatch = target.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
-  if (msgTextMatch) {
-    textRaw = msgTextMatch[1]
+  // Берём все текстовые блоки — выбираем самый длинный (основной текст)
+  const allTextMatches = [...target.matchAll(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g)];
+  const allTexts = allTextMatches.map(m =>
+    m[1]
       .replace(/<br[^>]*>/gi, '\n')
+      .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
+      .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
+      .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
       .replace(/<[^>]+>/g, '')
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
+      .trim()
+  ).filter(Boolean);
+  const textRaw = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
 
   let imageUrl = null;
   const photoMatch = target.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
@@ -365,27 +369,22 @@ client.on('interactionCreate', async interaction => {
     }
 
     const roleMention = config.streamRoleMention || '@Stream Events';
-    const links = [];
-    if (youtubeUrl) links.push(`**[YouTube](${youtubeUrl})**`);
-    if (tg.vkUrl)   links.push(`**[VK Видео](${tg.vkUrl})**`);
 
-    // Первая строка текста — заголовок (делаем крупным через #)
-    const allLines = tg.text.split('\n');
-    const title = allLines[0]?.trim() || '';
-    const body = allLines.slice(1).join('\n').trim();
-
-    // Убираем строки "YouTube | VK Видео" из тела — они дублируют ссылки
-    const cleanBody = body
-      .split('\n')
-      .filter(l => !/^(youtube|vk видео|ютуб)/i.test(l.trim()) && !/^youtube\s*\|\s*vk/i.test(l.trim()))
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n') // максимум одна пустая строка
+    // Текст как есть из Telegram
+    const cleanText = tg.text
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
 
+    // Первая непустая строка — заголовок #
+    const textLines = cleanText.split('\n');
+    let firstLine = true;
+    const formattedText = textLines.map(l => {
+      if (firstLine && l.trim()) { firstLine = false; return `# ${l.trim()}`; }
+      return l;
+    }).join('\n');
+
     let text = `-# ${roleMention}\n`;
-    text += `# ${title}\n`;
-    if (cleanBody) text += `\n${cleanBody}`;
-    if (links.length) text += `\n${links.join(' | ')}`;
+    if (formattedText) text += formattedText;
 
     const targetChannel = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!targetChannel) return interaction.editReply('❌ Канал не найден.');
