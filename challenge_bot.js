@@ -300,6 +300,13 @@ client.on('interactionCreate', async interaction => {
 
     // Добавляем тег роли
     const roleMention = mention || config.challengeRoleMention || '';
+    // Убираем пустые markdown маркеры
+    cleanText = cleanText
+      .replace(/[*]{2}\s*[*]{2}/g, '')
+      .replace(/[*]\s*[*]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
     let text = roleMention ? `-# ${roleMention}\n` : '';
     text += cleanText;
 
