@@ -1,7 +1,8 @@
 {
   "clientId": "1514213530310672464",
-  "announceChannelId": "ID_КАНАЛА_ДЛЯ_АНОНСОВ_ЧЕЛЛЕНДЖЕЙ",
-  "challengeRoleMention": "@AnimationChallenge",
+  "announceChannelId": "1430848111189692556",
+  "challengeRoleMention": "<@&1033406084595068928>",
+  "sketchingRoleMention": "<@&1085160176732090528>",
   "telegramChannel": "https://t.me/animationclub_challange",
   "telegramBotToken": "8938779085:AAFdHtMnGYMGjKXdDuMpCzy_Qc4CEIWAWck",
   "sketchingChannelId": "1358761596842672138",
