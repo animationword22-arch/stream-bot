@@ -342,6 +342,13 @@ client.on('interactionCreate', async interaction => {
       } catch (e) { console.warn('[TG] Обложка не найдена:', e.message); }
     }
 
+    // Если в тексте поста есть discord.gg ссылка — заменяем на канал скетчинга
+    if (tg && tg.text && config.sketchingChannelId) {
+      tg.text = tg.text
+        .replace(/\[([^\]]+)\]\(https?:\/\/discord\.gg\/[^\)]+\)/g, `<#${config.sketchingChannelId}>`)
+        .replace(/https?:\/\/discord\.gg\/\S+/g, `<#${config.sketchingChannelId}>`);
+    }
+
     const text = buildSketchingText({
       topic, time,
       discordUrl: eventUrl || config.sketchingEventUrl || '',
