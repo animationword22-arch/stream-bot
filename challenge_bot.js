@@ -1,6 +1,6 @@
 const {
   Client, GatewayIntentBits, PermissionFlagsBits,
-  SlashCommandBuilder, REST, Routes, AttachmentBuilder
+  SlashCommandBuilder, REST, Routes, AttachmentBuilder, EmbedBuilder
 } = require('discord.js');
 const https = require('https');
 const http  = require('http');
@@ -237,9 +237,9 @@ function buildSketchingText({ topic, time, discordUrl, sketchChannelId, telegram
 async function sendAnnouncement(channel, text, imageUrl) {
   if (!imageUrl) { await channel.send({ content: text }); return; }
   try {
-    // Всегда скачиваем буфер — так надёжнее для всех источников
-    const buffer = await fetchImageBuffer(imageUrl);
-    await channel.send({ content: text, files: [new AttachmentBuilder(buffer, { name: 'cover.jpg' })] });
+    // Отправляем через embed — картинка без сжатия
+    const embed = new EmbedBuilder().setImage(imageUrl).setColor(0x2B2D31);
+    await channel.send({ content: text, embeds: [embed] });
   } catch (e) {
     console.warn('[IMG] Ошибка:', e.message);
     await channel.send({ content: text });
