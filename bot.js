@@ -212,11 +212,11 @@ async function fetchTelegramPostById(channelHandle, postId) {
     const before = parseInt(postId) + offset;
     const html = await fetchUrl(`https://t.me/s/${channelHandle}?before=${before}`);
     const postBlocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
-    target = postBlocks.find(p => 
-      p.includes(`/${channelHandle}/${postId}"`) || 
-      p.includes(`/${channelHandle}/${postId} `) ||
-      p.includes(`data-post="${channelHandle}/${postId}"`)
-    );
+    // Ищем точное совпадение по data-post атрибуту
+    target = postBlocks.find(p => {
+      const dataPost = p.match(/data-post="([^"]+)"/);
+      return dataPost && dataPost[1] === `${channelHandle}/${postId}`;
+    });
     if (target) { console.log(`[TG] Found post at before=${before}`); break; }
   }
   if (!target) throw new Error(`Пост ${postId} не найден`);
