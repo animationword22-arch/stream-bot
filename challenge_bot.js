@@ -353,8 +353,11 @@ client.on('interactionCreate', async interaction => {
 
     const textLines = cleanText.split('\n');
     let firstLine = true;
-    cleanText = textLines.map(l => {
+    let lastIdx = textLines.length - 1;
+    while (lastIdx > 0 && !textLines[lastIdx].trim()) lastIdx--;
+    cleanText = textLines.map((l, i) => {
       if (firstLine && l.trim()) { firstLine = false; return `# ${l.trim()}`; }
+      if (i === lastIdx && l.trim()) return `**${l.trim()}**`;
       return l;
     }).join('\n');
 
