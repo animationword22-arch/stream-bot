@@ -32,7 +32,6 @@ const commands = [
     .addStringOption(o => o.setName('time').setDescription('Время по мск, напр. «17:00»').setRequired(false))
     .addStringOption(o => o.setName('event_url').setDescription('Ссылка на событие Discord').setRequired(false))
     .addAttachmentOption(o => o.setName('image').setDescription('Обложка').setRequired(false))
-    .addChannelOption(o => o.setName('channel').setDescription('Канал публикации').setRequired(false))
     .addStringOption(o => o.setName('mention').setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
@@ -44,7 +43,6 @@ const commands = [
     .addStringOption(o => o.setName('discord_url').setDescription('Ссылка на событие Discord').setRequired(false))
     .addAttachmentOption(o => o.setName('image').setDescription('Обложка').setRequired(false))
     .addStringOption(o => o.setName('image_url').setDescription('URL обложки').setRequired(false))
-    .addChannelOption(o => o.setName('channel').setDescription('Канал публикации').setRequired(false))
     .addStringOption(o => o.setName('mention').setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
@@ -183,11 +181,16 @@ async function fetchTelegramPostByAPI(channelUsername, postId) {
       .replace(/<[^>]+>/g, '')
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
       .replace(/\n{3,}/g, '\n\n')
       .trim()
     ).filter(Boolean);
-  const text = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
+  let text = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
+  // Заменяем discord.gg ссылки на упоминание канала
+  if (config.challengeWorkChannelId) {
+    text = text.replace(/\[([^\]]+)\]\(https?:\/\/discord\.gg\/[^\)]+\)/g, `<#${config.challengeWorkChannelId}>`);
+    text = text.replace(/https?:\/\/discord\.gg\/\S+/g, `<#${config.challengeWorkChannelId}>`);
+  }
 
   // Картинка
   let imageUrl = null;
@@ -371,7 +374,7 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (commandName === 'challengeend') {
-    const ch = client.channels.cache.get(config.announceChannelId);
+    const ch = interaction.options.getChannel('channel') || client.channels.cache.get(config.announceChannelId);
     if (!ch) return interaction.reply({ content: '❌ Канал не найден.', ephemeral: true });
     const role = config.challengeRoleMention || '';
     await ch.send((role ? `-# ${role}\n` : '') + `## ⏰ Приём работ завершён!\nСпасибо всем участникам — ждём ваши анимации! Результаты объявим совсем скоро 🎉`);
