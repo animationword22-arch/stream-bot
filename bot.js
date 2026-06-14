@@ -221,10 +221,8 @@ async function fetchTelegramPostById(channelHandle, postId) {
   }
   if (!target) throw new Error(`Пост ${postId} не найден`);
 
-  // Берём все текстовые блоки — выбираем самый длинный (основной текст)
-  const allTextMatches = [...target.matchAll(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g)];
-  const allTexts = allTextMatches.map(m =>
-    m[1]
+  function parseHtmlText(html) {
+    return html
       .replace(/<br[^>]*>/gi, '\n')
       .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
       .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
@@ -234,8 +232,19 @@ async function fetchTelegramPostById(channelHandle, postId) {
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  ).filter(Boolean);
+      .trim();
+  }
+
+  // Ищем текст во всех возможных блоках
+  const textPatterns = [
+    /<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g,
+    /<div class="tgme_widget_message_bubble"[^>]*>([\s\S]*?)<\/div>/g,
+  ];
+  let allTexts = [];
+  for (const pattern of textPatterns) {
+    const matches = [...target.matchAll(pattern)].map(m => parseHtmlText(m[1])).filter(Boolean);
+    allTexts = [...allTexts, ...matches];
+  }
   const textRaw = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
 
   let imageUrl = null;
