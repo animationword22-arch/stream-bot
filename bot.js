@@ -416,14 +416,19 @@ client.on('interactionCreate', async interaction => {
     const postIdMatch = postUrlRaw.match(/(\d+)$/);
     const postId = postIdMatch ? postIdMatch[1] : '';
 
+    if (!postId) return interaction.editReply('❌ Укажи ссылку на пост в Telegram.');
+
     let tg;
     try {
-      tg = await fetchTelegramStreamPost(tgHandle);
+      tg = await fetchTelegramPostByIdRSS(tgHandle, postId);
     } catch (e) {
-      return interaction.editReply(`❌ Не удалось распарсить Telegram: ${e.message}`);
+      try {
+        tg = await fetchTelegramPostById(tgHandle, postId);
+      } catch (e2) {
+        return interaction.editReply(`❌ Не удалось получить пост: ${e2.message}`);
+      }
     }
 
-    // Если прикреплена картинка — используем её вместо Telegram
     const attachedImage = interaction.options.getAttachment('image');
     if (attachedImage) tg.imageUrl = attachedImage.url;
 
