@@ -184,12 +184,7 @@ async function fetchTelegramPostByAPI(channelUsername, postId) {
       .replace(/\n{3,}/g, '\n\n')
       .trim()
     ).filter(Boolean);
-  let text = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
-  // Заменяем discord.gg ссылки на упоминание канала
-  if (config.challengeWorkChannelId) {
-    text = text.replace(/\[([^\]]+)\]\(https?:\/\/discord\.gg\/[^\)]+\)/g, `<#${config.challengeWorkChannelId}>`);
-    text = text.replace(/https?:\/\/discord\.gg\/\S+/g, `<#${config.challengeWorkChannelId}>`);
-  }
+  const text = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
 
   // Картинка
   let imageUrl = null;
@@ -285,6 +280,8 @@ client.on('interactionCreate', async interaction => {
 
     // Убираем блок "Подключайся к нашему голосовому каналу" из текста
     let cleanText = tg.text
+      .replace(/\[([^\]]+)\]\(https?:\/\/discord\.gg\/[^\)]+\)/g, `<#${config.challengeWorkChannelId || ''}>`)
+      .replace(/https?:\/\/discord\.gg\/\S+/g, `<#${config.challengeWorkChannelId || ''}>`)
       .replace(/Подключайся к нашему голосовому каналу[\s\S]*$/i, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
