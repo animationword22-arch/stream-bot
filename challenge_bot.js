@@ -287,16 +287,6 @@ client.on('interactionCreate', async interaction => {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-    // Первая строка — заголовок #
-    const textLines = cleanText.split('\n');
-    let firstLine = true;
-    cleanText = textLines.map(l => {
-      if (firstLine && l.trim()) { firstLine = false; return `# ${l.trim()}`; }
-      return l;
-    }).join('\n');
-
-    // Добавляем тег роли
-    const roleMention = mention || config.challengeRoleMention || '';
     // Убираем пустые markdown маркеры
     cleanText = cleanText
       .replace(/[*]{2}\s*[*]{2}/g, '')
@@ -304,6 +294,18 @@ client.on('interactionCreate', async interaction => {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
+    // Первая строка — заголовок #, последняя — жирный
+    const textLines = cleanText.split('\n');
+    let firstLine = true;
+    let lastIdx = textLines.length - 1;
+    while (lastIdx > 0 && !textLines[lastIdx].trim()) lastIdx--;
+    cleanText = textLines.map((l, i) => {
+      if (firstLine && l.trim()) { firstLine = false; return `# ${l.trim()}`; }
+      if (i === lastIdx && l.trim()) return `**${l.trim()}**`;
+      return l;
+    }).join('\n');
+
+    const roleMention = mention || config.challengeRoleMention || '';
     let text = roleMention ? `-# ${roleMention}\n` : '';
     text += cleanText;
 
