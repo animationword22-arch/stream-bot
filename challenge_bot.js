@@ -27,11 +27,10 @@ const commands = [
     .setName('autosketching')
     .setDescription('Анонс скетчинга из Telegram')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('topic').setDescription('Тема занятия, напр. «раскадровку»').setRequired(true))
-    .addStringOption(o => o.setName('post_id').setDescription('Номер поста в Telegram для обложки').setRequired(false))
-    .addStringOption(o => o.setName('time').setDescription('Время по мск, напр. «17:00»').setRequired(false))
+    .addStringOption(o => o.setName('post_id').setDescription('Номер поста в Telegram, напр. 808').setRequired(true))
     .addStringOption(o => o.setName('event_url').setDescription('Ссылка на событие Discord').setRequired(false))
-    .addAttachmentOption(o => o.setName('image').setDescription('Обложка').setRequired(false))
+    .addAttachmentOption(o => o.setName('image').setDescription('Обложка (если не загружена — берётся из Telegram)').setRequired(false))
+    .addChannelOption(o => o.setName('channel').setDescription('Канал публикации').setRequired(false))
     .addStringOption(o => o.setName('mention').setDescription('Тег роли/пользователя').setRequired(false)),
 
   new SlashCommandBuilder()
@@ -323,43 +322,53 @@ client.on('interactionCreate', async interaction => {
 
   if (commandName === 'autosketching') {
     await interaction.deferReply({ ephemeral: true });
-    const topic    = interaction.options.getString('topic');
-    const time     = interaction.options.getString('time') || '17:00';
+
+    const postId   = interaction.options.getString('post_id');
     const eventUrl = interaction.options.getString('event_url') || '';
-    const postId   = interaction.options.getString('post_id') || '';
     const attached = interaction.options.getAttachment('image');
-    let mention    = interaction.options.getString('mention') || '';
+    let   mention  = interaction.options.getString('mention') || '';
     if (mention && /^\d+$/.test(mention.trim())) mention = `<@&${mention.trim()}>`;
 
-    let imageUrl = attached ? attached.url : null;
-    if (!imageUrl) {
-      try {
-        const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
-        const tg = postId
-          ? await fetchTelegramPostById(tgHandle, postId)
-          : await fetchTelegramPost(tgHandle, ['скетчинг', 'sketching', 'персонаж', 'рисовать', 'наброски', 'live sketching']);
-        if (tg.imageUrl) imageUrl = tg.imageUrl;
-      } catch (e) { console.warn('[TG] Обложка не найдена:', e.message); }
+    const tgHandle = config.telegramChannel.replace(/^https?:\/\/t\.me\//, '');
+
+    // Получаем пост из Telegram
+    let tg = { text: '', imageUrl: null };
+    try {
+      tg = await fetchTelegramPostByAPI(tgHandle, postId);
+    } catch (e) {
+      return interaction.editReply(`❌ Не удалось получить пост: ${e.message}`);
     }
 
-    // Если в тексте поста есть discord.gg ссылка — заменяем на канал скетчинга
-    if (tg && tg.text && config.sketchingChannelId) {
-      tg.text = tg.text
-        .replace(/\[([^\]]+)\]\(https?:\/\/discord\.gg\/[^\)]+\)/g, `<#${config.sketchingChannelId}>`)
-        .replace(/https?:\/\/discord\.gg\/\S+/g, `<#${config.sketchingChannelId}>`);
-    }
+    if (attached) tg.imageUrl = attached.url;
 
-    const text = buildSketchingText({
-      topic, time,
-      discordUrl: eventUrl || config.sketchingEventUrl || '',
-      sketchChannelId: config.sketchingChannelId || '',
-      telegramUrl: config.telegramChannel || 'https://t.me/animationclub_challange',
-      mention, roleMention: mention ? null : (config.sketchingRoleMention || config.challengeRoleMention || null)
-    });
+    // Заменяем discord.gg на канал скетчинга
+    let cleanText = tg.text
+      .replace(/\[([^\]]+)\]\(https?:\/\/discord\.gg\/[^\)]+\)/g, `<#${config.sketchingChannelId || ''}>`)
+      .replace(/https?:\/\/discord\.gg\/\S+/g, `<#${config.sketchingChannelId || ''}>`)
+      .replace(/Подключайся к нашему голосовому каналу[\s\S]*$/i, '')
+      .replace(/[*]{2}\s*[*]{2}/g, '')
+      .replace(/[*]\s*[*]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    const textLines = cleanText.split('\n');
+    let firstLine = true;
+    cleanText = textLines.map(l => {
+      if (firstLine && l.trim()) { firstLine = false; return `# ${l.trim()}`; }
+      return l;
+    }).join('\n');
+
+    const roleMention = mention || config.sketchingRoleMention || config.challengeRoleMention || '';
+    let text = roleMention ? `-# ${roleMention}\n` : '';
+    text += cleanText;
+
+    if (eventUrl) {
+      text += `\n\n-# *Не забудьте подписаться на событие в Discord, чтобы вовремя получить оповещение о начале челленджа!*\n-# ${eventUrl}`;
+    }
 
     const ch = interaction.options.getChannel('channel') || client.channels.cache.get(config.sketchingAnnounceChannelId || config.announceChannelId);
     if (!ch) return interaction.editReply('❌ Канал не найден.');
-    await sendAnnouncement(ch, text, imageUrl);
+    await sendAnnouncement(ch, text, tg.imageUrl);
     await interaction.editReply(`✅ Опубликовано в <#${ch.id}>!`);
   }
 
