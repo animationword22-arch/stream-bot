@@ -149,28 +149,55 @@ async function fetchTelegramPost(channelHandle, keywords) {
 }
 
 // ─── Telegram Bot API ────────────────────────────────────────────────────────
+// Получаем пост из Telegram канала через RSS (rsshub.app)
 async function fetchTelegramPostByAPI(channelUsername, postId) {
-  const token = config.telegramBotToken;
-  if (!token) throw new Error('CHALLENGE_TELEGRAM_TOKEN не задан');
+  const rssUrl = `https://rsshub.app/telegram/channel/${channelUsername}`;
+  console.log(`[RSS] Fetching ${rssUrl}...`);
+  const xml = await fetchUrl(rssUrl);
+  console.log(`[RSS] Got ${xml.length} bytes`);
 
-  const botInfoRes = JSON.parse(await fetchUrl(`https://api.telegram.org/bot${token}/getMe`));
-  if (!botInfoRes.ok) throw new Error('Не удалось получить info бота');
-  const botId = botInfoRes.result.id;
+  // Парсим RSS — ищем item с нужным postId в ссылке
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(m => m[0]);
+  console.log(`[RSS] Found ${items.length} items`);
 
-  const fwdRes = JSON.parse(await fetchUrl(`https://api.telegram.org/bot${token}/forwardMessage?chat_id=${botId}&from_chat_id=@${channelUsername}&message_id=${postId}`));
-  if (!fwdRes.ok) throw new Error(`Не удалось переслать пост: ${fwdRes.description}`);
+  let targetItem = null;
+  if (postId) {
+    targetItem = items.find(item => item.includes(`/${channelUsername}/${postId}`) || item.includes(`t.me/${channelUsername}/${postId}`));
+  }
+  if (!targetItem && items.length) targetItem = items[0]; // берём последний если не нашли
+  if (!targetItem) throw new Error('Пост не найден в RSS');
 
-  const msg = fwdRes.result;
-  const text = msg.text || msg.caption || '';
-
-  let imageUrl = null;
-  if (msg.photo && msg.photo.length) {
-    const largest = msg.photo[msg.photo.length - 1];
-    const fileRes = JSON.parse(await fetchUrl(`https://api.telegram.org/bot${token}/getFile?file_id=${largest.file_id}`));
-    if (fileRes.ok) imageUrl = `https://api.telegram.org/file/bot${token}/${fileRes.result.file_path}`;
+  // Текст из <description>
+  const descMatch = targetItem.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) ||
+                    targetItem.match(/<description>([\s\S]*?)<\/description>/);
+  let text = '';
+  if (descMatch) {
+    text = descMatch[1]
+      .replace(/<br[^>]*>/gi, '\n')
+      .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
+      .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
+      .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
+      .replace(/<img[^>]+src="([^"]+)"[^>]*/g, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
-  await fetchUrl(`https://api.telegram.org/bot${token}/deleteMessage?chat_id=${botId}&message_id=${msg.message_id}`);
+  // Картинка из <enclosure> или <media:content>
+  let imageUrl = null;
+  const encMatch = targetItem.match(/<enclosure[^>]+url="([^"]+)"/) ||
+                   targetItem.match(/<media:content[^>]+url="([^"]+)"/);
+  if (encMatch) imageUrl = encMatch[1];
+
+  // Или из img тега в description
+  if (!imageUrl && descMatch) {
+    const imgMatch = descMatch[1].match(/<img[^>]+src="([^"]+)"/);
+    if (imgMatch) imageUrl = imgMatch[1];
+  }
+
   return { text, imageUrl };
 }
 
