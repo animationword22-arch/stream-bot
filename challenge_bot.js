@@ -6,6 +6,7 @@ const https = require('https');
 const http  = require('http');
 const config = require('./challenge_config.json');
 config.token = process.env.CHALLENGE_TOKEN || config.token || '';
+config.telegramBotToken = process.env.CHALLENGE_TELEGRAM_TOKEN || config.telegramBotToken || '';
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
