@@ -158,6 +158,8 @@ async function fetchTelegramPostByIdRSS(channelHandle, postId) {
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(parseInt(c)))
+      .replace(/[*]{2}\s*,?\s*[*]{2}/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
@@ -238,6 +240,8 @@ async function fetchTelegramStreamPost(channelHandle) {
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(parseInt(c)))
+      .replace(/[*]{2}\s*,?\s*[*]{2}/g, '')
       .replace(/\n{3,}/g, '\n\n') // убираем лишние пустые строки
       .trim();
   }
@@ -281,6 +285,8 @@ async function fetchTelegramPostById(channelHandle, postId) {
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(parseInt(c)))
+      .replace(/[*]{2}\s*,?\s*[*]{2}/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
