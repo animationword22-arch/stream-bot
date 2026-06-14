@@ -148,6 +148,32 @@ async function fetchTelegramPost(channelHandle, keywords) {
   return parsePostHtml(target);
 }
 
+// ─── Telegram Bot API ────────────────────────────────────────────────────────
+async function fetchTelegramPostByAPI(channelUsername, postId) {
+  const token = config.telegramBotToken;
+  if (!token) throw new Error('CHALLENGE_TELEGRAM_TOKEN не задан');
+
+  const botInfoRes = JSON.parse(await fetchUrl(`https://api.telegram.org/bot${token}/getMe`));
+  if (!botInfoRes.ok) throw new Error('Не удалось получить info бота');
+  const botId = botInfoRes.result.id;
+
+  const fwdRes = JSON.parse(await fetchUrl(`https://api.telegram.org/bot${token}/forwardMessage?chat_id=${botId}&from_chat_id=@${channelUsername}&message_id=${postId}`));
+  if (!fwdRes.ok) throw new Error(`Не удалось переслать пост: ${fwdRes.description}`);
+
+  const msg = fwdRes.result;
+  const text = msg.text || msg.caption || '';
+
+  let imageUrl = null;
+  if (msg.photo && msg.photo.length) {
+    const largest = msg.photo[msg.photo.length - 1];
+    const fileRes = JSON.parse(await fetchUrl(`https://api.telegram.org/bot${token}/getFile?file_id=${largest.file_id}`));
+    if (fileRes.ok) imageUrl = `https://api.telegram.org/file/bot${token}/${fileRes.result.file_path}`;
+  }
+
+  await fetchUrl(`https://api.telegram.org/bot${token}/deleteMessage?chat_id=${botId}&message_id=${msg.message_id}`);
+  return { text, imageUrl };
+}
+
 function buildChallengeText({ title, time, theme, deadline, postUrl, workChannelId, discordUrl, mention, roleMention }) {
   const t = time || '19:00';
   const workChannel = workChannelId ? `<#${workChannelId}>` : '#animation-challenge-chat';
