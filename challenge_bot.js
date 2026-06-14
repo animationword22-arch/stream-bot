@@ -149,53 +149,55 @@ async function fetchTelegramPost(channelHandle, keywords) {
 }
 
 // ─── Telegram Bot API ────────────────────────────────────────────────────────
-// Получаем пост из Telegram канала через RSS (rsshub.app)
+// Получаем пост из Telegram канала через t.me/s/
 async function fetchTelegramPostByAPI(channelUsername, postId) {
-  const rssUrl = `https://rsshub.app/telegram/channel/${channelUsername}`;
-  console.log(`[RSS] Fetching ${rssUrl}...`);
-  const xml = await fetchUrl(rssUrl);
-  console.log(`[RSS] Got ${xml.length} bytes`);
-
-  // Парсим RSS — ищем item с нужным postId в ссылке
-  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(m => m[0]);
-  console.log(`[RSS] Found ${items.length} items`);
-
-  let targetItem = null;
-  if (postId) {
-    targetItem = items.find(item => item.includes(`/${channelUsername}/${postId}`) || item.includes(`t.me/${channelUsername}/${postId}`));
+  console.log(`[TG] Fetching post ${postId} from ${channelUsername}...`);
+  
+  // Пробуем разные значения before начиная с postId+1
+  let target = null;
+  const pid = parseInt(postId);
+  
+  for (let offset = 1; offset <= 50; offset++) {
+    const before = pid + offset;
+    const html = await fetchUrl(`https://t.me/s/${channelUsername}?before=${before}`);
+    const blocks = [...html.matchAll(/<div class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g)].map(m => m[0]);
+    
+    target = blocks.find(b => {
+      const m = b.match(/data-post="([^"]+)"/);
+      return m && m[1] === `${channelUsername}/${postId}`;
+    });
+    
+    if (target) { console.log(`[TG] Found at before=${before}`); break; }
+    if (offset % 10 === 0) console.log(`[TG] Trying before=${before}...`);
   }
-  if (!targetItem && items.length) targetItem = items[0]; // берём последний если не нашли
-  if (!targetItem) throw new Error('Пост не найден в RSS');
+  
+  if (!target) throw new Error(`Пост ${postId} не найден`);
 
-  // Текст из <description>
-  const descMatch = targetItem.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) ||
-                    targetItem.match(/<description>([\s\S]*?)<\/description>/);
-  let text = '';
-  if (descMatch) {
-    text = descMatch[1]
+  // Текст
+  const allTexts = [...target.matchAll(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/g)]
+    .map(m => m[1]
       .replace(/<br[^>]*>/gi, '\n')
       .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
       .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
       .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
-      .replace(/<img[^>]+src="([^"]+)"[^>]*/g, '')
       .replace(/<[^>]+>/g, '')
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
+      .trim()
+    ).filter(Boolean);
+  const text = allTexts.length ? allTexts.reduce((a, b) => a.length >= b.length ? a : b, '') : '';
 
-  // Картинка из <enclosure> или <media:content>
+  // Картинка
   let imageUrl = null;
-  const encMatch = targetItem.match(/<enclosure[^>]+url="([^"]+)"/) ||
-                   targetItem.match(/<media:content[^>]+url="([^"]+)"/);
-  if (encMatch) imageUrl = encMatch[1];
-
-  // Или из img тега в description
-  if (!imageUrl && descMatch) {
-    const imgMatch = descMatch[1].match(/<img[^>]+src="([^"]+)"/);
-    if (imgMatch) imageUrl = imgMatch[1];
+  const photoMatch = target.match(/tgme_widget_message_photo_wrap[^>]+style="[^"]*background-image:url\('([^']+)'\)/);
+  if (photoMatch) imageUrl = photoMatch[1];
+  if (!imageUrl) {
+    const bgMatches = [...target.matchAll(/background-image:url\('(https:\/\/cdn[^']+)'\)/g)];
+    for (const m of bgMatches) {
+      if (!m[1].includes('youtube') && !m[1].includes('vk.com')) { imageUrl = m[1]; break; }
+    }
   }
 
   return { text, imageUrl };
