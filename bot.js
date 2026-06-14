@@ -32,10 +32,11 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('autoannounce')
-    .setDescription('Подтянуть анонс стрима из Telegram и опубликовать')
+    .setDescription('Опубликовать анонс из Telegram')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o => o.setName('post_url').setDescription('Ссылка на пост в Telegram, напр. https://t.me/animationschool_ru/18015').setRequired(true))
-    .addAttachmentOption(o => o.setName('image').setDescription('Обложка стрима (если не загружена — берётся из Telegram)').setRequired(false))
+    .addStringOption(o => o.setName('post_url').setDescription('Ссылка на пост в Telegram, напр. https://t.me/animationschool_ru/17974').setRequired(true))
+    .addStringOption(o => o.setName('event_url').setDescription('Ссылка на событие Discord').setRequired(false))
+    .addAttachmentOption(o => o.setName('image').setDescription('Обложка (если не загружена — берётся из Telegram)').setRequired(false))
     .addChannelOption(o => o.setName('channel').setDescription('Канал для публикации').setRequired(false))
     .addStringOption(o => o.setName('mention').setDescription('Тег роли или пользователя').setRequired(false)),
 
@@ -125,6 +126,55 @@ function fetchImageBuffer(url) {
     req.on('error', reject);
     req.setTimeout(30000, () => { req.destroy(); reject(new Error('Timeout')); });
   });
+}
+
+// ─── Парсинг поста по ID через RSS ──────────────────────────────────────────
+async function fetchTelegramPostByIdRSS(channelHandle, postId) {
+  const rssUrl = `https://rsshub.app/telegram/channel/${channelHandle}`;
+  console.log(`[RSS] Fetching ${rssUrl}...`);
+  const xml = await fetchUrl(rssUrl);
+  console.log(`[RSS] Got ${xml.length} bytes`);
+
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(m => m[0]);
+  console.log(`[RSS] Found ${items.length} items`);
+
+  let targetItem = items.find(item =>
+    item.includes(`/${channelHandle}/${postId}`) ||
+    item.includes(`t.me/${channelHandle}/${postId}`)
+  );
+  if (!targetItem && items.length) targetItem = items[0];
+  if (!targetItem) throw new Error('Пост не найден в RSS');
+
+  const descMatch = targetItem.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) ||
+                    targetItem.match(/<description>([\s\S]*?)<\/description>/);
+  let text = '';
+  if (descMatch) {
+    text = descMatch[1]
+      .replace(/<br[^>]*>/gi, '\n')
+      .replace(/<b>([\s\S]*?)<\/b>/g, '**$1**')
+      .replace(/<i>([\s\S]*?)<\/i>/g, '*$1*')
+      .replace(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, '[$2]($1)')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  let imageUrl = null;
+  const encMatch = targetItem.match(/<enclosure[^>]+url="([^"]+)"/) ||
+                   targetItem.match(/<media:content[^>]+url="([^"]+)"/);
+  if (encMatch) imageUrl = encMatch[1];
+  if (!imageUrl && descMatch) {
+    const imgMatch = descMatch[1].match(/<img[^>]+src="([^"]+)"/);
+    if (imgMatch) imageUrl = imgMatch[1];
+  }
+
+  const ytMatch = text.match(/(https?:\/\/(?:www\.)?youtube[^\s)]+)/);
+  const vkMatch = text.match(/(https?:\/\/(?:www\.)?vkvideo[^\s)]+)/);
+
+  return { text, imageUrl, youtubeUrl: ytMatch ? ytMatch[1] : null, vkUrl: vkMatch ? vkMatch[1] : null };
 }
 
 // ─── Парсинг Telegram-канала ──────────────────────────────────────────────────
